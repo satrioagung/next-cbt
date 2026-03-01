@@ -5,8 +5,9 @@ import { supabase } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────
 type Kelas    = { id: string; nama: string; tingkat: string; jumlah_siswa?: number; jumlah_mapel?: number }
-type Mapel    = { id: string; nama: string; kode: string; deskripsi: string; jumlah_soal?: number; jumlah_kelas?: number }
-type Question = { id: string; number: number; question: string; is_active: boolean; mata_pelajaran_id?: string | null }
+type Mapel    = { id: string; nama: string; kode: string; deskripsi: string; jumlah_soal?: number; jumlah_kelas?: number; jumlah_bank?: number }
+type Question = { id: string; number: number; question: string; is_active: boolean; mata_pelajaran_id?: string | null; bank_soal_id?: string | null }
+type BankSoal = { id: string; nama: string; deskripsi: string; is_active: boolean; jumlah_soal?: number }
 type Jadwal   = {
   id: string; nama: string; tanggal: string; waktu_mulai: string; waktu_selesai: string
   durasi_menit: number; is_active: boolean; mata_pelajaran_id: string | null; kelas_id: string | null
@@ -60,9 +61,10 @@ export default function AkademikPage() {
     | { type: 'kelas-siswa';  kelasId: string; kelasNama: string }
     | { type: 'kelas-mapel';  kelasId: string; kelasNama: string }
     | { type: 'mapel-form';   id: string | null }
-    | { type: 'mapel-soal';   mapelId: string; mapelNama: string }   // bank soal per mapel
+    | { type: 'mapel-bank';   mapelId: string; mapelNama: string }   // bank soal list untuk mapel
+    | { type: 'mapel-soal';   mapelId: string; mapelNama: string; bankId: string; bankNama: string }   // soal dalam 1 bank soal
     | { type: 'mapel-kelas';  mapelId: string; mapelNama: string }   // relasi mapel → kelas
-    | { type: 'soal-form';    id: string | null; mapelId: string }
+    | { type: 'soal-form';    id: string | null; mapelId: string; bankId: string }
     | { type: 'jadwal-form';  id: string | null }
     | { type: 'jadwal-soal';  jadwalId: string; jadwalNama: string }
     | { type: 'token-gen' }
@@ -81,6 +83,10 @@ export default function AkademikPage() {
   const [mapelKelasIds,  setMapelKelasIds]  = useState<string[]>([])
   const [jadwalSoalIds,  setJadwalSoalIds]  = useState<string[]>([])
 
+  // Bank soal state
+  const [bankSoalList,   setBankSoalList]   = useState<BankSoal[]>([])
+  const [bankSoalForMapel, setBSFM]         = useState<BankSoal[]>([]) // bank soal milik mapel yang dipilih
+
   // ── Init ─────────────────────────────────────────────────────
   useEffect(() => { init() }, [])
 
@@ -94,10 +100,10 @@ export default function AkademikPage() {
   }
 
   const loadAll = async () => {
-    const [k, m, q, j, t, s, sk, mk] = await Promise.all([
+    const [k, m, q, j, t, s, sk, mk, bs, bsm] = await Promise.all([
       supabase.from('kelas').select('*').order('tingkat').order('nama'),
       supabase.from('mata_pelajaran').select('*').order('nama'),
-      supabase.from('questions').select('id,number,question,is_active,mata_pelajaran_id').order('number'),
+      supabase.from('questions').select('id,number,question,is_active,mata_pelajaran_id,bank_soal_id').order('number'),
       supabase.from('v_jadwal_full').select('*').order('tanggal', { ascending: false }),
       supabase.from('token_ujian')
         .select('*, jadwal:jadwal_id(nama, mata_pelajaran:mata_pelajaran_id(nama))')
@@ -105,6 +111,8 @@ export default function AkademikPage() {
       supabase.from('profiles').select('id,full_name,npm').eq('role', 'student').order('full_name'),
       supabase.from('siswa_kelas').select('kelas_id,student_id'),
       supabase.from('mapel_kelas').select('mata_pelajaran_id,kelas_id'),
+      supabase.from('bank_soal').select('*').order('nama'),
+      supabase.from('bank_soal_mapel').select('bank_soal_id,mata_pelajaran_id'),
     ])
 
     const kelasFull = (k.data || []).map(kl => ({
@@ -114,13 +122,19 @@ export default function AkademikPage() {
     }))
     const mapelFull = (m.data || []).map(mp => ({
       ...mp,
-      jumlah_soal:  q.data?.filter(r => r.mata_pelajaran_id === mp.id).length || 0,
+      jumlah_soal:  q.data?.filter(r => r.mata_pelajaran_id === mp.id || bsm.data?.some(b => b.mata_pelajaran_id === mp.id && q.data?.some(qq => qq.bank_soal_id === b.bank_soal_id))).length || 0,
       jumlah_kelas: mk.data?.filter(r => r.mata_pelajaran_id === mp.id).length || 0,
+      jumlah_bank:  bsm.data?.filter(r => r.mata_pelajaran_id === mp.id).length || 0,
+    }))
+    const bankFull = (bs.data || []).map((b: any) => ({
+      ...b,
+      jumlah_soal: q.data?.filter(r => r.bank_soal_id === b.id).length || 0,
     }))
 
     setKelasList(kelasFull)
     setMapelList(mapelFull)
     setSoalList(q.data || [])
+    setBankSoalList(bankFull)
     setJadwalList(j.data || [])
     setTokenList((t.data || []).map((tk: any) => ({
       ...tk,
@@ -212,10 +226,43 @@ export default function AkademikPage() {
     setPanel({ type: 'mapel-form', id: m?.id || null })
   }
 
-  // Bank Soal per mapel
-  const openBankSoal = (m: Mapel) => {
+  // Bank Soal: tampilkan daftar bank soal milik mapel ini
+  const openBankSoal = async (m: Mapel) => {
+    // Load bank soal yang terhubung ke mapel ini
+    const { data: bsm } = await supabase
+      .from('bank_soal_mapel').select('bank_soal_id').eq('mata_pelajaran_id', m.id)
+    const bankIds = bsm?.map(r => r.bank_soal_id) || []
+    const banks = bankSoalList
+      .filter(b => bankIds.includes(b.id))
+      .map(b => ({ ...b, jumlah_soal: soalList.filter(q => q.bank_soal_id === b.id).length }))
+    setBSFM(banks)
+    setPanel({ type: 'mapel-bank', mapelId: m.id, mapelNama: m.nama })
+  }
+
+  // Buat bank soal baru langsung dari panel mapel
+  const createBankForMapel = async (mapelId: string, mapelNama: string) => {
+    const nama = prompt(`Nama bank soal baru untuk ${mapelNama}:`)
+    if (!nama?.trim()) return
+    const { data: newBank } = await supabase
+      .from('bank_soal').insert({ nama: nama.trim() }).select().single()
+    if (newBank) {
+      await supabase.from('bank_soal_mapel').insert({ bank_soal_id: newBank.id, mata_pelajaran_id: mapelId })
+    }
+    await loadAll()
+    // Reopen panel with fresh data
+    const { data: bsm } = await supabase
+      .from('bank_soal_mapel').select('bank_soal_id').eq('mata_pelajaran_id', mapelId)
+    const bankIds = bsm?.map(r => r.bank_soal_id) || []
+    const { data: freshBanks } = await supabase.from('bank_soal').select('*').in('id', bankIds)
+    const banks = (freshBanks || []).map(b => ({ ...b, jumlah_soal: soalList.filter(q => q.bank_soal_id === b.id).length }))
+    setBSFM(banks)
+    flash('✅ Bank soal dibuat!')
+  }
+
+  // Buka soal dalam bank soal tertentu
+  const openBankSoalDetail = (mapelId: string, mapelNama: string, bank: BankSoal) => {
     setSF({ number: '', question: '', is_active: true })
-    setPanel({ type: 'mapel-soal', mapelId: m.id, mapelNama: m.nama })
+    setPanel({ type: 'mapel-soal', mapelId, mapelNama, bankId: bank.id, bankNama: bank.nama })
   }
 
   // Relasi mapel → kelas
@@ -237,11 +284,11 @@ export default function AkademikPage() {
     await loadAll()
   }
 
-  // ── SOAL (bank soal, selalu dalam konteks mapel) ───────────────
-  const openSoalForm = (mapelId: string, q?: Question) => {
+  // ── SOAL (selalu dalam konteks bank soal + mapel) ──────────────
+  const openSoalForm = (mapelId: string, bankId: string, q?: Question) => {
     setSF(q ? { number: q.number.toString(), question: q.question, is_active: q.is_active }
              : { number: '', question: '', is_active: true })
-    setPanel({ type: 'soal-form', id: q?.id || null, mapelId })
+    setPanel({ type: 'soal-form', id: q?.id || null, mapelId, bankId })
   }
 
   const saveSoal = async () => {
@@ -251,16 +298,17 @@ export default function AkademikPage() {
       number: parseInt(soalForm.number),
       question: soalForm.question,
       mata_pelajaran_id: panel.mapelId,
+      bank_soal_id: panel.bankId,
       is_active: soalForm.is_active,
     }
     panel.id
       ? await supabase.from('questions').update(payload).eq('id', panel.id)
       : await supabase.from('questions').insert(payload)
     await loadAll(); setSaving(false)
-    // Kembali ke bank soal mapel ini
+    // Kembali ke soal list bank ini
+    const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
     const mapel = mapelList.find(m => m.id === panel.mapelId)
-    if (mapel) setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel.nama })
-    else closePanel()
+    setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
     flash('✅ Soal disimpan!')
   }
 
@@ -492,7 +540,7 @@ export default function AkademikPage() {
                       {/* Stats */}
                       <div className="flex items-center gap-3 mb-4">
                         <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-lg">
-                          📝 {m.jumlah_soal} soal
+                          📚 {m.jumlah_bank || 0} bank soal
                         </span>
                         <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-lg">
                           🏫 {m.jumlah_kelas} kelas
@@ -640,23 +688,60 @@ export default function AkademikPage() {
               )}
 
               {/* Bank Soal per Mapel */}
-              {panel.type === 'mapel-soal' && (
+              {/* Bank Soal List for a Mapel */}
+              {panel.type === 'mapel-bank' && (
                 <Panel title={`Bank Soal — ${panel.mapelNama}`} onClose={closePanel}>
-                  <button onClick={() => openSoalForm(panel.mapelId)}
+                  <button onClick={() => createBankForMapel(panel.mapelId, panel.mapelNama)}
+                    className="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 mb-3">
+                    <Icon d={IC.plus} className="w-3.5 h-3.5" /> Buat Bank Soal Baru
+                  </button>
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                    {bankSoalForMapel.length === 0 && (
+                      <p className="text-xs text-slate-600 text-center py-8">Belum ada bank soal untuk mata pelajaran ini.</p>
+                    )}
+                    {bankSoalForMapel.map(b => (
+                      <div key={b.id} className="bg-slate-800/50 rounded-xl p-3 border border-slate-800 hover:border-slate-700 transition-colors">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-200 truncate">{b.nama}</p>
+                            {b.deskripsi && <p className="text-xs text-slate-500 truncate">{b.deskripsi}</p>}
+                          </div>
+                          <span className="text-xs bg-slate-900 text-amber-400 px-2 py-0.5 rounded flex-shrink-0">{b.jumlah_soal} soal</span>
+                        </div>
+                        <button
+                          onClick={() => openBankSoalDetail(panel.mapelId, panel.mapelNama, b)}
+                          className="w-full mt-2 text-xs bg-slate-900 hover:bg-slate-700 text-slate-300 py-1.5 rounded-lg transition-colors">
+                          Buka → Kelola Soal
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-slate-800">
+                    <p className="text-xs text-slate-600">Soal yang ditambahkan ke bank soal di sini akan muncul saat assign soal ke jadwal ujian.</p>
+                  </div>
+                </Panel>
+              )}
+
+              {/* Soal list dalam bank soal */}
+              {panel.type === 'mapel-soal' && (
+                <Panel title={panel.bankNama}
+                  sub={`Bank Soal · ${panel.mapelNama}`}
+                  onClose={() => setPanel({ type: 'mapel-bank', mapelId: panel.mapelId, mapelNama: panel.mapelNama })}>
+                  <button onClick={() => openSoalForm(panel.mapelId, panel.bankId)}
                     className="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 mb-3">
                     <Icon d={IC.plus} className="w-3.5 h-3.5" /> Tambah Soal Baru
                   </button>
                   <div className="space-y-2 max-h-[65vh] overflow-y-auto">
-                    {soalList.filter(q => q.mata_pelajaran_id === panel.mapelId).length === 0 && (
+                    {soalList.filter(q => q.bank_soal_id === panel.bankId).length === 0 && (
                       <p className="text-xs text-slate-600 text-center py-8">Belum ada soal. Klik tombol di atas untuk menambah.</p>
                     )}
-                    {soalList.filter(q => q.mata_pelajaran_id === panel.mapelId).map(q => (
+                    {soalList.filter(q => q.bank_soal_id === panel.bankId).map(q => (
                       <div key={q.id} className={`bg-slate-800/50 rounded-xl p-3 border border-slate-800 ${!q.is_active ? 'opacity-50' : ''}`}>
                         <div className="flex items-start justify-between gap-2 mb-1.5">
                           <span className="text-xs text-amber-500 font-semibold">#{q.number}</span>
                           <div className="flex items-center gap-1">
                             <Btn label={q.is_active ? 'Nonaktif' : 'Aktif'} onClick={() => toggleSoalActive(q.id, q.is_active)} />
-                            <Btn label="Edit" onClick={() => openSoalForm(panel.mapelId, q)} />
+                            <Btn label="Edit" onClick={() => openSoalForm(panel.mapelId, panel.bankId, q)} />
                             <Btn label="Hapus" danger onClick={() => deleteSoal(q.id)} />
                           </div>
                         </div>
@@ -670,9 +755,9 @@ export default function AkademikPage() {
               {/* Soal Form */}
               {panel.type === 'soal-form' && (
                 <Panel title={panel.id ? 'Edit Soal' : 'Tambah Soal'} onClose={() => {
+                  const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
                   const mapel = mapelList.find(m => m.id === panel.mapelId)
-                  if (mapel) setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel.nama })
-                  else closePanel()
+                  setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
                 }}>
                   <F label="Nomor Soal"><input type="number" value={soalForm.number} onChange={e => setSF(p => ({ ...p, number: e.target.value }))} min="1" className="input-field" /></F>
                   <F label="Pertanyaan"><textarea value={soalForm.question} onChange={e => setSF(p => ({ ...p, question: e.target.value }))} placeholder="Tulis pertanyaan essay..." rows={6} className="input-field" /></F>
@@ -681,9 +766,9 @@ export default function AkademikPage() {
                     Soal aktif
                   </label>
                   <PA onSave={saveSoal} onCancel={() => {
+                    const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
                     const mapel = mapelList.find(m => m.id === panel.mapelId)
-                    if (mapel) setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel.nama })
-                    else closePanel()
+                    setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
                   }} saving={saving} disabled={!soalForm.question || !soalForm.number} />
                 </Panel>
               )}
@@ -729,10 +814,21 @@ export default function AkademikPage() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-slate-500">{jadwalSoalIds.length} soal dipilih</p>
                   </div>
-                  {/* Group by mapel */}
+                  {/* Group by bank soal / mapel */}
                   {mapelList.map(m => {
-                    const soalMapel = soalList.filter(q => q.mata_pelajaran_id === m.id)
-                    if (soalMapel.length === 0) return null
+                    // Tampilkan soal dari bank soal yang linked ke mapel ini ATAU soal legacy dengan mata_pelajaran_id
+                    const soalMapel = soalList.filter(q =>
+                      q.mata_pelajaran_id === m.id ||
+                      (q.bank_soal_id && bankSoalList.some(b =>
+                        b.id === q.bank_soal_id &&
+                        // bank soal ini linked ke mapel ini (kita punya data dari loadAll)
+                        soalList.filter(qq => qq.bank_soal_id === b.id).length >= 0 // always true, soal cukup cek bank_soal_id
+                      ) && q.mata_pelajaran_id === m.id)
+                    )
+                    // Ambil juga soal yang bank_soal_id linked ke mapel ini via bank_soal_mapel
+                    // Kita filter: soal yang mata_pelajaran_id = mapel ini
+                    const soalFinal = soalList.filter(q => q.mata_pelajaran_id === m.id && q.is_active)
+                    if (soalFinal.length === 0) return null
                     return (
                       <div key={m.id} className="mb-4">
                         <div className="flex items-center justify-between mb-1.5">
@@ -742,7 +838,7 @@ export default function AkademikPage() {
                             Pilih semua
                           </button>
                         </div>
-                        {soalMapel.map(q => (
+                        {soalFinal.map(q => (
                           <label key={q.id} className={`flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer ${!q.is_active ? 'opacity-40' : ''}`}>
                             <input type="checkbox" checked={jadwalSoalIds.includes(q.id)}
                               onChange={() => toggleJadwalSoal(q.id)} className="accent-amber-500 mt-0.5 flex-shrink-0" />
@@ -755,7 +851,7 @@ export default function AkademikPage() {
                       </div>
                     )
                   })}
-                  {soalList.length === 0 && <p className="text-xs text-slate-600 text-center py-6">Belum ada soal di bank soal.</p>}
+                  {soalList.filter(q => q.is_active).length === 0 && <p className="text-xs text-slate-600 text-center py-6">Belum ada soal aktif. Tambahkan di Bank Soal.</p>}
                 </Panel>
               )}
 
@@ -830,11 +926,14 @@ function Btn({ label, onClick, danger }: { label: string; onClick: () => void; d
   )
 }
 
-function Panel({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function Panel({ title, sub, children, onClose }: { title: string; sub?: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="card p-5 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-slate-100 text-sm">{title}</h3>
+        <div className="min-w-0">
+          <h3 className="font-semibold text-slate-100 text-sm truncate">{title}</h3>
+          {sub && <p className="text-xs text-slate-500 truncate">{sub}</p>}
+        </div>
         <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 rounded hover:bg-slate-800">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
