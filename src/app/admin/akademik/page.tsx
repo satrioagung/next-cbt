@@ -11,6 +11,7 @@ type BankSoal = { id: string; nama: string; deskripsi: string; is_active: boolea
 type Jadwal   = {
   id: string; nama: string; tanggal: string; waktu_mulai: string; waktu_selesai: string
   durasi_menit: number; is_active: boolean; mata_pelajaran_id: string | null; kelas_id: string | null
+  bank_soal_id?: string | null; bank_soal_nama?: string | null
   mapel_nama?: string | null; mapel_kode?: string | null; kelas_nama?: string | null
   jumlah_soal?: number; jumlah_siswa?: number
 }
@@ -66,7 +67,7 @@ export default function AkademikPage() {
     | { type: 'mapel-kelas';  mapelId: string; mapelNama: string }   // relasi mapel → kelas
     | { type: 'soal-form';    id: string | null; mapelId: string; bankId: string }
     | { type: 'jadwal-form';  id: string | null }
-    | { type: 'jadwal-soal';  jadwalId: string; jadwalNama: string }
+    | { type: 'jadwal-soal';  jadwalId: string; jadwalNama: string; jadwalMapelId: string }
     | { type: 'token-gen' }
   >({ type: 'none' })
 
@@ -74,7 +75,7 @@ export default function AkademikPage() {
   const [kelasForm, setKF]  = useState({ nama: '', tingkat: '' })
   const [mapelForm, setMF]  = useState({ nama: '', kode: '', deskripsi: '' })
   const [soalForm,  setSF]  = useState({ number: '', question: '', is_active: true })
-  const [jadwalForm, setJF] = useState({ nama: '', mata_pelajaran_id: '', kelas_id: '', tanggal: '', waktu_mulai: '', waktu_selesai: '', durasi_menit: '90' })
+  const [jadwalForm, setJF] = useState({ nama: '', bank_soal_id: '', kelas_id: '', tanggal: '', waktu_mulai: '', waktu_selesai: '', durasi_menit: '90' })
   const [tokenForm, setTF]  = useState({ jadwal_id: '', expired_at: '' })
 
   // Relasi states
@@ -86,6 +87,7 @@ export default function AkademikPage() {
   // Bank soal state
   const [bankSoalList,   setBankSoalList]   = useState<BankSoal[]>([])
   const [bankSoalForMapel, setBSFM]         = useState<BankSoal[]>([]) // bank soal milik mapel yang dipilih
+  const [bankKelasForJadwal, setBKFJ]       = useState<{id:string;nama:string}[]>([]) // kelas dari bank soal yang dipilih di form jadwal
 
   // ── Init ─────────────────────────────────────────────────────
   useEffect(() => { init() }, [])
@@ -98,6 +100,9 @@ export default function AkademikPage() {
     await loadAll()
     setLoading(false)
   }
+
+  // store bsm for use in jadwal-soal panel
+  const [bsmData, setBsmData] = useState<{bank_soal_id: string; mata_pelajaran_id: string}[]>([])
 
   const loadAll = async () => {
     const [k, m, q, j, t, s, sk, mk, bs, bsm] = await Promise.all([
@@ -135,6 +140,7 @@ export default function AkademikPage() {
     setMapelList(mapelFull)
     setSoalList(q.data || [])
     setBankSoalList(bankFull)
+    setBsmData(bsm.data || [])
     setJadwalList(j.data || [])
     setTokenList((t.data || []).map((tk: any) => ({
       ...tk,
@@ -294,8 +300,14 @@ export default function AkademikPage() {
   const saveSoal = async () => {
     if (panel.type !== 'soal-form') return
     setSaving(true)
+    // Auto-nomor: max+1 untuk soal baru, pertahankan untuk edit
+    let number = parseInt(soalForm.number) || 0
+    if (!panel.id || !number) {
+      const soalDiBank = soalList.filter(q => q.bank_soal_id === panel.bankId)
+      number = soalDiBank.reduce((m, q) => Math.max(m, q.number), 0) + 1
+    }
     const payload = {
-      number: parseInt(soalForm.number),
+      number,
       question: soalForm.question,
       mata_pelajaran_id: panel.mapelId,
       bank_soal_id: panel.bankId,
@@ -305,7 +317,6 @@ export default function AkademikPage() {
       ? await supabase.from('questions').update(payload).eq('id', panel.id)
       : await supabase.from('questions').insert(payload)
     await loadAll(); setSaving(false)
-    // Kembali ke soal list bank ini
     const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
     const mapel = mapelList.find(m => m.id === panel.mapelId)
     setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
@@ -326,25 +337,104 @@ export default function AkademikPage() {
   // ── JADWAL ────────────────────────────────────────────────────
   const saveJadwal = async () => {
     if (panel.type !== 'jadwal-form') return
+    if (!jadwalForm.bank_soal_id) { flash('⚠️ Pilih bank soal terlebih dahulu.'); return }
     setSaving(true)
+
+    // Ambil info bank soal: mapel dan kelas yang terhubung
+    const [bsmRes, bskRes] = await Promise.all([
+      supabase.from('bank_soal_mapel').select('mata_pelajaran_id').eq('bank_soal_id', jadwalForm.bank_soal_id),
+      supabase.from('bank_soal_kelas').select('kelas_id').eq('bank_soal_id', jadwalForm.bank_soal_id),
+    ])
+    const mapelId = bsmRes.data?.[0]?.mata_pelajaran_id || null
+    const kelasId = jadwalForm.kelas_id || bskRes.data?.[0]?.kelas_id || null
+
     const payload = {
       nama: jadwalForm.nama,
-      mata_pelajaran_id: jadwalForm.mata_pelajaran_id || null,
-      kelas_id: jadwalForm.kelas_id || null,
+      bank_soal_id: jadwalForm.bank_soal_id,
+      mata_pelajaran_id: mapelId,
+      kelas_id: kelasId,
       tanggal: jadwalForm.tanggal,
       waktu_mulai: jadwalForm.waktu_mulai,
       waktu_selesai: jadwalForm.waktu_selesai,
       durasi_menit: parseInt(jadwalForm.durasi_menit),
     }
-    panel.id
-      ? await supabase.from('jadwal_ujian').update(payload).eq('id', panel.id)
-      : await supabase.from('jadwal_ujian').insert(payload)
-    await loadAll(); setSaving(false); closePanel(); flash('✅ Jadwal disimpan!')
+
+    let jadwalId: string
+    if (panel.id) {
+      await supabase.from('jadwal_ujian').update(payload).eq('id', panel.id)
+      jadwalId = panel.id
+    } else {
+      const { data: newJadwal } = await supabase.from('jadwal_ujian').insert(payload).select('id').single()
+      jadwalId = newJadwal?.id
+    }
+
+    // Auto-assign semua soal aktif dari bank soal ini ke jadwal
+    if (jadwalId) {
+      // Hapus soal lama dulu (kalau edit)
+      await supabase.from('jadwal_soal').delete().eq('jadwal_id', jadwalId)
+      // Ambil soal aktif dari bank soal ini
+      const { data: soalBank } = await supabase
+        .from('questions').select('id, number')
+        .eq('bank_soal_id', jadwalForm.bank_soal_id)
+        .eq('is_active', true)
+        .order('number')
+      if (soalBank?.length) {
+        const inserts = soalBank.map((q, i) => ({ jadwal_id: jadwalId, question_id: q.id, urutan: i + 1 }))
+        await supabase.from('jadwal_soal').insert(inserts)
+        flash(`✅ Jadwal disimpan! ${soalBank.length} soal otomatis ditambahkan.`)
+      } else {
+        flash('✅ Jadwal disimpan! (Bank soal belum punya soal aktif)')
+      }
+    }
+
+    await loadAll(); setSaving(false); closePanel()
+  }
+
+  const openJadwalForm = async (j?: Jadwal) => {
+    if (j) {
+      setJF({
+        nama: j.nama,
+        bank_soal_id: j.bank_soal_id || '',
+        kelas_id: j.kelas_id || '',
+        tanggal: j.tanggal,
+        waktu_mulai: j.waktu_mulai,
+        waktu_selesai: j.waktu_selesai,
+        durasi_menit: j.durasi_menit.toString(),
+      })
+      // Load kelas untuk bank soal ini
+      if (j.bank_soal_id) {
+        const { data: bsk } = await supabase
+          .from('bank_soal_kelas')
+          .select('kelas_id, kelas:kelas_id(id, nama)')
+          .eq('bank_soal_id', j.bank_soal_id)
+        setBKFJ((bsk || []).map((r: any) => ({ id: r.kelas.id, nama: r.kelas.nama })))
+      }
+    } else {
+      setJF({ nama: '', bank_soal_id: '', kelas_id: '', tanggal: '', waktu_mulai: '', waktu_selesai: '', durasi_menit: '90' })
+      setBKFJ([])
+    }
+    setPanel({ type: 'jadwal-form', id: j?.id || null })
+  }
+
+  // Ketika bank soal dipilih di form → load kelas terkait
+  const onBankSoalChange = async (bankId: string) => {
+    setJF(p => ({ ...p, bank_soal_id: bankId, kelas_id: '' }))
+    if (!bankId) { setBKFJ([]); return }
+    const { data: bsk } = await supabase
+      .from('bank_soal_kelas')
+      .select('kelas_id, kelas:kelas_id(id, nama)')
+      .eq('bank_soal_id', bankId)
+    setBKFJ((bsk || []).map((r: any) => ({ id: r.kelas.id, nama: r.kelas.nama })))
   }
 
   const deleteJadwal = async (id: string) => {
-    if (!confirm('Hapus jadwal ini? Token terkait juga akan terhapus.')) return
-    await supabase.from('jadwal_ujian').delete().eq('id', id)
+    if (!confirm('Hapus jadwal ini? Soal, token, dan sesi ujian terkait juga akan terhapus.')) return
+    // Hapus dependensi dulu (jika tidak pakai ON DELETE CASCADE di DB)
+    await supabase.from('jadwal_soal').delete().eq('jadwal_id', id)
+    await supabase.from('token_ujian').delete().eq('jadwal_id', id)
+    await supabase.from('exam_sessions').delete().eq('jadwal_id', id)
+    const { error } = await supabase.from('jadwal_ujian').delete().eq('id', id)
+    if (error) { flash('❌ Gagal hapus: ' + error.message); return }
     await loadAll(); flash('🗑 Jadwal dihapus.')
     if ((panel as any).jadwalId === id) closePanel()
   }
@@ -354,20 +444,12 @@ export default function AkademikPage() {
     await loadAll()
   }
 
-  const openJadwalForm = (j?: Jadwal) => {
-    setJF(j ? {
-      nama: j.nama, mata_pelajaran_id: j.mata_pelajaran_id || '',
-      kelas_id: j.kelas_id || '', tanggal: j.tanggal,
-      waktu_mulai: j.waktu_mulai, waktu_selesai: j.waktu_selesai,
-      durasi_menit: j.durasi_menit.toString(),
-    } : { nama: '', mata_pelajaran_id: '', kelas_id: '', tanggal: '', waktu_mulai: '', waktu_selesai: '', durasi_menit: '90' })
-    setPanel({ type: 'jadwal-form', id: j?.id || null })
-  }
+  // openJadwalForm sudah didefinisikan di atas bersama saveJadwal
 
   const openJadwalSoal = async (j: Jadwal) => {
     const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', j.id)
     setJadwalSoalIds(data?.map(d => d.question_id) || [])
-    setPanel({ type: 'jadwal-soal', jadwalId: j.id, jadwalNama: j.nama })
+    setPanel({ type: 'jadwal-soal', jadwalId: j.id, jadwalNama: j.nama, jadwalMapelId: j.mata_pelajaran_id || '' })
   }
 
   const toggleJadwalSoal = async (questionId: string) => {
@@ -382,15 +464,39 @@ export default function AkademikPage() {
     await loadAll()
   }
 
+  const selectAllSoalForJadwal = async () => {
+    if (panel.type !== 'jadwal-soal') return
+    // Ambil semua soal aktif yang terkait dengan mapel jadwal ini
+    const mapelId = panel.jadwalMapelId
+    const eligible = getSoalForMapel(mapelId).filter(q => !jadwalSoalIds.includes(q.id))
+    for (let i = 0; i < eligible.length; i++) {
+      await supabase.from('jadwal_soal').insert({ jadwal_id: panel.jadwalId, question_id: eligible[i].id, urutan: jadwalSoalIds.length + i + 1 })
+    }
+    const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', panel.jadwalId)
+    setJadwalSoalIds(data?.map(d => d.question_id) || [])
+    await loadAll()
+  }
+
   const selectAllSoalMapel = async (mapelId: string) => {
     if (panel.type !== 'jadwal-soal') return
-    const filtered = soalList.filter(q => q.mata_pelajaran_id === mapelId && q.is_active && !jadwalSoalIds.includes(q.id))
+    const filtered = getSoalForMapel(mapelId).filter(q => !jadwalSoalIds.includes(q.id))
     for (let i = 0; i < filtered.length; i++) {
       await supabase.from('jadwal_soal').insert({ jadwal_id: panel.jadwalId, question_id: filtered[i].id, urutan: jadwalSoalIds.length + i + 1 })
     }
     const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', panel.jadwalId)
     setJadwalSoalIds(data?.map(d => d.question_id) || [])
     await loadAll()
+  }
+
+  // Ambil semua soal aktif untuk mapel tertentu (via mata_pelajaran_id langsung ATAU via bank_soal_mapel)
+  const getSoalForMapel = (mapelId: string) => {
+    if (!mapelId) return soalList.filter(q => q.is_active)
+    // Bank soal yang terhubung ke mapel ini
+    const bankIds = bsmData.filter(r => r.mata_pelajaran_id === mapelId).map(r => r.bank_soal_id)
+    return soalList.filter(q => q.is_active && (
+      q.mata_pelajaran_id === mapelId ||
+      (q.bank_soal_id && bankIds.includes(q.bank_soal_id))
+    ))
   }
 
   // ── TOKEN ─────────────────────────────────────────────────────
@@ -577,6 +683,7 @@ export default function AkademikPage() {
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            {j.bank_soal_nama && <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded">📚 {j.bank_soal_nama}</span>}
                             {j.mapel_kode && <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">{j.mapel_kode}</span>}
                             {j.kelas_nama && <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{j.kelas_nama}</span>}
                             <span className={`text-xs px-2 py-0.5 rounded ${j.is_active ? 'bg-green-500/10 text-green-400' : 'bg-slate-700 text-slate-500'}`}>
@@ -753,25 +860,36 @@ export default function AkademikPage() {
               )}
 
               {/* Soal Form */}
-              {panel.type === 'soal-form' && (
-                <Panel title={panel.id ? 'Edit Soal' : 'Tambah Soal'} onClose={() => {
-                  const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
-                  const mapel = mapelList.find(m => m.id === panel.mapelId)
-                  setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
-                }}>
-                  <F label="Nomor Soal"><input type="number" value={soalForm.number} onChange={e => setSF(p => ({ ...p, number: e.target.value }))} min="1" className="input-field" /></F>
-                  <F label="Pertanyaan"><textarea value={soalForm.question} onChange={e => setSF(p => ({ ...p, question: e.target.value }))} placeholder="Tulis pertanyaan essay..." rows={6} className="input-field" /></F>
-                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                    <input type="checkbox" checked={soalForm.is_active} onChange={e => setSF(p => ({ ...p, is_active: e.target.checked }))} className="accent-amber-500" />
-                    Soal aktif
-                  </label>
-                  <PA onSave={saveSoal} onCancel={() => {
-                    const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
-                    const mapel = mapelList.find(m => m.id === panel.mapelId)
-                    setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
-                  }} saving={saving} disabled={!soalForm.question || !soalForm.number} />
-                </Panel>
-              )}
+              {panel.type === 'soal-form' && (() => {
+                const soalDiBank = soalList.filter(q => q.bank_soal_id === panel.bankId)
+                const nextNum = panel.id
+                  ? (parseInt(soalForm.number) || soalDiBank.reduce((m, q) => Math.max(m, q.number), 0))
+                  : soalDiBank.reduce((m, q) => Math.max(m, q.number), 0) + 1
+                const bank = bankSoalList.find(b => b.id === panel.bankId)
+                const mapel = mapelList.find(m => m.id === panel.mapelId)
+                return (
+                  <Panel title={panel.id ? 'Edit Soal' : 'Tambah Soal'}
+                    sub={`${bank?.nama || '—'} · ${mapel?.nama || '—'}`}
+                    onClose={() => {
+                      setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank?.nama || '—' })
+                    }}>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800/50 px-3 py-2 rounded-lg">
+                      Nomor otomatis: <span className="text-amber-400 font-bold ml-1">#{nextNum}</span>
+                    </div>
+                    <F label="Pertanyaan">
+                      <textarea value={soalForm.question} onChange={e => setSF(p => ({ ...p, question: e.target.value }))}
+                        placeholder="Tulis pertanyaan essay..." rows={6} className="input-field" autoFocus />
+                    </F>
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={soalForm.is_active} onChange={e => setSF(p => ({ ...p, is_active: e.target.checked }))} className="accent-amber-500" />
+                      Soal aktif
+                    </label>
+                    <PA onSave={saveSoal} onCancel={() => {
+                      setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank?.nama || '—' })
+                    }} saving={saving} disabled={!soalForm.question} />
+                  </Panel>
+                )
+              })()}
 
               {/* Kelas di Mapel */}
               {panel.type === 'mapel-kelas' && (
@@ -783,77 +901,93 @@ export default function AkademikPage() {
               )}
 
               {/* Jadwal Form */}
-              {panel.type === 'jadwal-form' && (
-                <Panel title={panel.id ? 'Edit Jadwal' : 'Buat Jadwal Ujian'} onClose={closePanel}>
-                  <F label="Nama Ujian"><input type="text" value={jadwalForm.nama} onChange={e => setJF(p => ({ ...p, nama: e.target.value }))} placeholder="cth: UTS Semester Genap 2025" className="input-field" /></F>
-                  <F label="Mata Pelajaran">
-                    <select value={jadwalForm.mata_pelajaran_id} onChange={e => setJF(p => ({ ...p, mata_pelajaran_id: e.target.value }))} className="input-field">
-                      <option value="">Pilih mata pelajaran</option>
-                      {mapelList.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
-                    </select>
-                  </F>
-                  <F label="Kelas">
-                    <select value={jadwalForm.kelas_id} onChange={e => setJF(p => ({ ...p, kelas_id: e.target.value }))} className="input-field">
-                      <option value="">Pilih kelas</option>
-                      {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                    </select>
-                  </F>
-                  <F label="Tanggal"><input type="date" value={jadwalForm.tanggal} onChange={e => setJF(p => ({ ...p, tanggal: e.target.value }))} className="input-field" /></F>
-                  <div className="grid grid-cols-2 gap-2">
-                    <F label="Mulai"><input type="time" value={jadwalForm.waktu_mulai} onChange={e => setJF(p => ({ ...p, waktu_mulai: e.target.value }))} className="input-field" /></F>
-                    <F label="Selesai"><input type="time" value={jadwalForm.waktu_selesai} onChange={e => setJF(p => ({ ...p, waktu_selesai: e.target.value }))} className="input-field" /></F>
-                  </div>
-                  <F label="Durasi (menit)"><input type="number" value={jadwalForm.durasi_menit} onChange={e => setJF(p => ({ ...p, durasi_menit: e.target.value }))} min="10" max="300" className="input-field" /></F>
-                  <PA onSave={saveJadwal} onCancel={closePanel} saving={saving} disabled={!jadwalForm.nama || !jadwalForm.tanggal} />
-                </Panel>
-              )}
+              {panel.type === 'jadwal-form' && (() => {
+                const selBank = bankSoalList.find(b => b.id === jadwalForm.bank_soal_id)
+                const soalAktif = soalList.filter(q => q.bank_soal_id === jadwalForm.bank_soal_id && q.is_active).length
+                return (
+                  <Panel title={panel.id ? 'Edit Jadwal' : 'Buat Jadwal Ujian'} onClose={closePanel}>
+                    <F label="Nama Ujian">
+                      <input type="text" value={jadwalForm.nama} onChange={e => setJF(p => ({ ...p, nama: e.target.value }))}
+                        placeholder="cth: UTS PKN X TKJ" className="input-field" />
+                    </F>
+                    <F label="Bank Soal">
+                      <select value={jadwalForm.bank_soal_id} onChange={e => onBankSoalChange(e.target.value)} className="input-field">
+                        <option value="">Pilih bank soal</option>
+                        {bankSoalList.map(b => (
+                          <option key={b.id} value={b.id}>{b.nama} ({b.jumlah_soal || 0} soal)</option>
+                        ))}
+                      </select>
+                      {selBank && (
+                        <p className="text-xs mt-1 text-emerald-400">
+                          ✓ {soalAktif} soal aktif akan otomatis ditambahkan ke jadwal ini
+                        </p>
+                      )}
+                    </F>
+                    <F label="Kelas">
+                      {bankKelasForJadwal.length === 0 ? (
+                        <p className="text-xs text-slate-500 py-2">
+                          {jadwalForm.bank_soal_id ? 'Bank soal ini belum punya kelas. Tambahkan kelas di menu Bank Soal.' : 'Pilih bank soal dulu.'}
+                        </p>
+                      ) : (
+                        <select value={jadwalForm.kelas_id} onChange={e => setJF(p => ({ ...p, kelas_id: e.target.value }))} className="input-field">
+                          <option value="">
+                            {bankKelasForJadwal.length === 1 ? `${bankKelasForJadwal[0].nama} (otomatis)` : 'Pilih kelas'}
+                          </option>
+                          {bankKelasForJadwal.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                        </select>
+                      )}
+                    </F>
+                    <F label="Tanggal">
+                      <input type="date" value={jadwalForm.tanggal} onChange={e => setJF(p => ({ ...p, tanggal: e.target.value }))} className="input-field" />
+                    </F>
+                    <div className="grid grid-cols-2 gap-2">
+                      <F label="Mulai"><input type="time" value={jadwalForm.waktu_mulai} onChange={e => setJF(p => ({ ...p, waktu_mulai: e.target.value }))} className="input-field" /></F>
+                      <F label="Selesai"><input type="time" value={jadwalForm.waktu_selesai} onChange={e => setJF(p => ({ ...p, waktu_selesai: e.target.value }))} className="input-field" /></F>
+                    </div>
+                    <F label="Durasi (menit)">
+                      <input type="number" value={jadwalForm.durasi_menit} onChange={e => setJF(p => ({ ...p, durasi_menit: e.target.value }))} min="10" max="300" className="input-field" />
+                    </F>
+                    <PA onSave={saveJadwal} onCancel={closePanel} saving={saving} disabled={!jadwalForm.nama || !jadwalForm.bank_soal_id || !jadwalForm.tanggal} />
+                  </Panel>
+                )
+              })()}
 
               {/* Assign Soal ke Jadwal */}
-              {panel.type === 'jadwal-soal' && (
-                <Panel title={`Soal — ${panel.jadwalNama}`} onClose={closePanel}>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-slate-500">{jadwalSoalIds.length} soal dipilih</p>
-                  </div>
-                  {/* Group by bank soal / mapel */}
-                  {mapelList.map(m => {
-                    // Tampilkan soal dari bank soal yang linked ke mapel ini ATAU soal legacy dengan mata_pelajaran_id
-                    const soalMapel = soalList.filter(q =>
-                      q.mata_pelajaran_id === m.id ||
-                      (q.bank_soal_id && bankSoalList.some(b =>
-                        b.id === q.bank_soal_id &&
-                        // bank soal ini linked ke mapel ini (kita punya data dari loadAll)
-                        soalList.filter(qq => qq.bank_soal_id === b.id).length >= 0 // always true, soal cukup cek bank_soal_id
-                      ) && q.mata_pelajaran_id === m.id)
-                    )
-                    // Ambil juga soal yang bank_soal_id linked ke mapel ini via bank_soal_mapel
-                    // Kita filter: soal yang mata_pelajaran_id = mapel ini
-                    const soalFinal = soalList.filter(q => q.mata_pelajaran_id === m.id && q.is_active)
-                    if (soalFinal.length === 0) return null
-                    return (
-                      <div key={m.id} className="mb-4">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-medium text-blue-400">{m.kode} — {m.nama}</span>
-                          <button onClick={() => selectAllSoalMapel(m.id)}
-                            className="text-xs text-slate-500 hover:text-amber-400 transition-colors">
-                            Pilih semua
-                          </button>
+              {panel.type === 'jadwal-soal' && (() => {
+                const soalUntukJadwal = getSoalForMapel(panel.jadwalMapelId)
+                const belumDipilih = soalUntukJadwal.filter(q => !jadwalSoalIds.includes(q.id))
+                return (
+                  <Panel title={`Soal — ${panel.jadwalNama}`} onClose={closePanel}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-slate-500">{jadwalSoalIds.length} soal dipilih</p>
+                      {belumDipilih.length > 0 && (
+                        <button onClick={selectAllSoalForJadwal}
+                          className="text-xs text-amber-400 hover:text-amber-300 font-medium">
+                          Pilih semua ({soalUntukJadwal.length})
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1 max-h-[65vh] overflow-y-auto">
+                      {soalUntukJadwal.length === 0 && (
+                        <div className="text-center py-8">
+                          <p className="text-xs text-slate-600 mb-2">Belum ada soal untuk mata pelajaran ini.</p>
+                          <p className="text-xs text-slate-700">Tambahkan soal dulu di tab Mata Pelajaran → Bank Soal.</p>
                         </div>
-                        {soalFinal.map(q => (
-                          <label key={q.id} className={`flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer ${!q.is_active ? 'opacity-40' : ''}`}>
-                            <input type="checkbox" checked={jadwalSoalIds.includes(q.id)}
-                              onChange={() => toggleJadwalSoal(q.id)} className="accent-amber-500 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <span className="text-xs text-amber-500 font-semibold mr-1">#{q.number}</span>
-                              <span className="text-xs text-slate-300 leading-relaxed line-clamp-2">{q.question}</span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    )
-                  })}
-                  {soalList.filter(q => q.is_active).length === 0 && <p className="text-xs text-slate-600 text-center py-6">Belum ada soal aktif. Tambahkan di Bank Soal.</p>}
-                </Panel>
-              )}
+                      )}
+                      {soalUntukJadwal.map(q => (
+                        <label key={q.id} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer">
+                          <input type="checkbox" checked={jadwalSoalIds.includes(q.id)}
+                            onChange={() => toggleJadwalSoal(q.id)} className="accent-amber-500 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="text-xs text-amber-500 font-semibold mr-1">#{q.number}</span>
+                            <span className="text-xs text-slate-300 leading-relaxed line-clamp-2">{q.question}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </Panel>
+                )
+              })()}
 
               {/* Token Generate */}
               {panel.type === 'token-gen' && (

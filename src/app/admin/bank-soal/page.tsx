@@ -192,10 +192,17 @@ export default function BankSoalPage() {
   const saveSoal = async () => {
     if (!selBank) { flash('❌ Pilih bank soal dulu.'); return }
     if (!soalFormQ.trim()) { flash('❌ Pertanyaan tidak boleh kosong.'); return }
-    if (!soalFormNum)       { flash('❌ Nomor soal wajib diisi.'); return }
     setSoalSaving(true)
+
+    // Auto-nomor: jika edit pakai nomor lama, jika baru pakai max+1
+    let number = parseInt(soalFormNum) || 0
+    if (!soalFormId || !number) {
+      const maxNum = soalList.reduce((m, q) => Math.max(m, q.number), 0)
+      number = maxNum + 1
+    }
+
     const payload = {
-      number: parseInt(soalFormNum),
+      number,
       question: soalFormQ.trim(),
       is_active: soalFormActive,
       bank_soal_id: selBank.id,
@@ -435,44 +442,49 @@ export default function BankSoalPage() {
   // ════════════════════════════════════════════════════════════
   // VIEW: SOAL FORM
   // ════════════════════════════════════════════════════════════
-  if (view === 'soal-form') return (
-    <div className="min-h-screen bg-slate-950">
-      <Header title={soalFormId ? 'Edit Soal' : 'Tambah Soal'} sub={selBank?.nama}
-        back={() => setView('bank-detail')} />
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="card p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Nomor Soal *</label>
-            <input type="number" value={soalFormNum} min="1" placeholder="1"
-              onChange={e => setSFNum(e.target.value)}
-              className="input-field w-32" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Pertanyaan *</label>
-            <textarea value={soalFormQ} rows={10} placeholder="Tulis pertanyaan essay..."
-              onChange={e => setSFQ(e.target.value)}
-              className="input-field w-full" />
-            <p className="text-xs text-slate-600 mt-1">{soalFormQ.length} karakter</p>
-          </div>
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input type="checkbox" checked={soalFormActive} onChange={e => setSFActive(e.target.checked)}
-              className="accent-amber-500 w-4 h-4" />
-            <span className="text-sm text-slate-300">Soal aktif (muncul di ujian)</span>
-          </label>
-          {msg && <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-sm">{msg}</div>}
-          <div className="flex gap-3 pt-1">
-            <button onClick={saveSoal} disabled={soalSaving || !soalFormQ.trim() || !soalFormNum}
-              className="btn-primary flex items-center gap-2">
-              {soalSaving
-                ? <><div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"/>Menyimpan...</>
-                : <><Ic d="M5 13l4 4L19 7"/>Simpan Soal</>}
-            </button>
-            <button onClick={() => setView('bank-detail')} className="btn-secondary">Batal</button>
+  if (view === 'soal-form') {
+    const nextNum = soalFormId
+      ? parseInt(soalFormNum) || (soalList.reduce((m, q) => Math.max(m, q.number), 0))
+      : soalList.reduce((m, q) => Math.max(m, q.number), 0) + 1
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <Header title={soalFormId ? 'Edit Soal' : 'Tambah Soal'} sub={selBank?.nama}
+          back={() => setView('bank-detail')} />
+        <div className="max-w-2xl mx-auto p-4">
+          <div className="card p-6 space-y-5">
+            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800/50 px-3 py-2 rounded-lg">
+              <Ic d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" cls="w-3.5 h-3.5 flex-shrink-0" />
+              Nomor soal otomatis: <span className="text-amber-400 font-bold">#{nextNum}</span>
+              {soalFormId && ' (nomor saat ini)'}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Pertanyaan *</label>
+              <textarea value={soalFormQ} rows={10} placeholder="Tulis pertanyaan essay..."
+                onChange={e => setSFQ(e.target.value)}
+                autoFocus
+                className="input-field w-full" />
+              <p className="text-xs text-slate-600 mt-1">{soalFormQ.length} karakter</p>
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={soalFormActive} onChange={e => setSFActive(e.target.checked)}
+                className="accent-amber-500 w-4 h-4" />
+              <span className="text-sm text-slate-300">Soal aktif (muncul di ujian)</span>
+            </label>
+            {msg && <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-sm">{msg}</div>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={saveSoal} disabled={soalSaving || !soalFormQ.trim()}
+                className="btn-primary flex items-center gap-2">
+                {soalSaving
+                  ? <><div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"/>Menyimpan...</>
+                  : <><Ic d="M5 13l4 4L19 7"/>Simpan Soal</>}
+              </button>
+              <button onClick={() => setView('bank-detail')} className="btn-secondary">Batal</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   // ════════════════════════════════════════════════════════════
   // VIEW: PENILAIAN DETAIL

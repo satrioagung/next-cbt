@@ -30,9 +30,17 @@ export default function AdminPage() {
   const [filterKelas, setFilterKelas]   = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
+  // Pagination
+  const PAGE_SIZE = 15
+  const [page, setPage] = useState(1)
+
+  // Bulk select
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
   // Edit student
   const [selStudent, setSelStudent] = useState<Student | null>(null)
-  const [stuForm, setSF]  = useState({ full_name: '', npm: '', username: '' })
+  const [stuForm, setSF]  = useState({ full_name: '', npm: '', username: '', kelas_id: '' as string | undefined })
   const [stuSaving, setSS] = useState(false)
   const [stuMsg, setSM]   = useState('')
 
@@ -99,7 +107,8 @@ export default function AdminPage() {
   // ── Edit student ──────────────────────────────────────────────
   const openEdit = (s: Student) => {
     setSelStudent(s)
-    setSF({ full_name: s.full_name, npm: s.npm, username: s.username === '-' ? '' : s.username })
+    const kelasRow = kelasList.find(k => k.nama === s.kelas_nama)
+    setSF({ full_name: s.full_name, npm: s.npm, username: s.username === '-' ? '' : s.username, kelas_id: kelasRow?.id || '' })
     setSM(''); setView('edit-student')
   }
 
@@ -107,19 +116,44 @@ export default function AdminPage() {
     if (!selStudent) return
     setSS(true); setSM('')
     const { error } = await supabase.from('profiles')
-      .update({ full_name: stuForm.full_name, npm: stuForm.npm, username: stuForm.username || null })
+      .update({ full_name: stuForm.full_name.trim(), npm: stuForm.npm.trim(), username: stuForm.username.trim() || null })
       .eq('id', selStudent.id)
     if (error) { setSM('❌ ' + error.message); setSS(false); return }
-    setSM('✅ Profil diperbarui!'); await loadData(); setSS(false)
+    // Update kelas jika ada perubahan
+    if (stuForm.kelas_id !== undefined) {
+      await supabase.from('siswa_kelas').delete().eq('student_id', selStudent.id)
+      if (stuForm.kelas_id) {
+        await supabase.from('siswa_kelas').insert({ student_id: selStudent.id, kelas_id: stuForm.kelas_id })
+      }
+    }
+    setSM('✅ Data siswa berhasil diperbarui!'); await loadData(); setSS(false)
   }
 
   const deleteStu = async (id: string) => {
-    if (!confirm('Hapus siswa ini? Semua data akan terhapus.')) return
+    if (!confirm('Hapus siswa ini? Semua data akan terhapus permanen.')) return
     await supabase.from('answers').delete().eq('student_id', id)
     await supabase.from('exam_sessions').delete().eq('student_id', id)
     await supabase.from('siswa_kelas').delete().eq('student_id', id)
     await supabase.from('profiles').delete().eq('id', id)
+    // Hapus dari auth.users via admin API (jika tersedia)
+    await supabase.auth.admin?.deleteUser(id).catch(() => {})
     await loadData(); setView('dashboard')
+  }
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return
+    if (!confirm(`Hapus ${selected.size} siswa? Semua data akan terhapus permanen.`)) return
+    setBulkDeleting(true)
+    const ids = Array.from(selected)
+    for (const id of ids) {
+      await supabase.from('answers').delete().eq('student_id', id)
+      await supabase.from('exam_sessions').delete().eq('student_id', id)
+      await supabase.from('siswa_kelas').delete().eq('student_id', id)
+      await supabase.from('profiles').delete().eq('id', id)
+    }
+    setSelected(new Set())
+    setBulkDeleting(false)
+    await loadData()
   }
 
   // ── Import ─────────────────────────────────────────────────────
@@ -151,7 +185,7 @@ export default function AdminPage() {
 
     for (const row of importData) {
       // Buat email internal dari username (tidak diekspos ke siswa)
-      const fakeEmail = `${row.username.toLowerCase().replace(/\s+/g, '')}@uts-internal.local`
+      const fakeEmail = `${row.username.toLowerCase().replace(/\s+/g, '')}@bintang9`
 
       const { data, error } = await supabase.auth.signUp({
         email: fakeEmail,
@@ -206,6 +240,21 @@ export default function AdminPage() {
     return true
   })
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage   = Math.min(page, totalPages)
+  const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // Reset page when filters change
+  const setSearchReset    = (v: string) => { setSearch(v);       setPage(1); setSelected(new Set()) }
+  const setFilterKelasR   = (v: string) => { setFilterKelas(v);  setPage(1); setSelected(new Set()) }
+  const setFilterStatusR  = (v: string) => { setFilterStatus(v); setPage(1); setSelected(new Set()) }
+
+  // Select helpers
+  const toggleOne   = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll   = () => setSelected(p => p.size === paginated.length ? new Set() : new Set(paginated.map(s => s.id)))
+  const allChecked  = paginated.length > 0 && paginated.every(s => selected.has(s.id))
+  const someChecked = paginated.some(s => selected.has(s.id)) && !allChecked
+
   const stats = {
     total:     students.length,
     submitted: students.filter(s => s.is_submitted).length,
@@ -256,11 +305,13 @@ export default function AdminPage() {
                 placeholder="username untuk login" className="input-field font-mono" />
               <p className="text-xs text-slate-600 mt-1">Username digunakan siswa untuk login. Hanya huruf, angka, titik, dan underscore.</p>
             </div>
-            {selStudent.kelas_nama && (
+            {selStudent.kelas_nama !== undefined && (
               <div>
                 <label className="block text-sm text-slate-300 mb-1.5">Kelas</label>
-                <p className="input-field text-slate-300">{selStudent.kelas_nama}</p>
-                <p className="text-xs text-slate-600 mt-1">Ubah kelas di menu Akademik → Kelas.</p>
+                <select value={stuForm.kelas_id || ''} onChange={e => setSF(p => ({ ...p, kelas_id: e.target.value }))} className="input-field">
+                  <option value="">— Tidak ada kelas —</option>
+                  {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                </select>
               </div>
             )}
           </div>
@@ -535,13 +586,13 @@ export default function AdminPage() {
         {/* Toolbar */}
         <div className="flex flex-wrap gap-2 mb-4 items-center justify-between">
           <div className="flex gap-2 flex-wrap flex-1">
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" value={search} onChange={e => setSearchReset(e.target.value)}
               placeholder="Cari nama, NPM, atau username..." className="input-field text-sm py-2 flex-1 min-w-[200px] max-w-xs" />
-            <select value={filterKelas} onChange={e => setFilterKelas(e.target.value)} className="input-field text-sm py-2 w-auto">
+            <select value={filterKelas} onChange={e => setFilterKelasR(e.target.value)} className="input-field text-sm py-2 w-auto">
               <option value="">Semua Kelas</option>
               {kelasList.map(k => <option key={k.id} value={k.nama}>{k.nama}</option>)}
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field text-sm py-2 w-auto">
+            <select value={filterStatus} onChange={e => setFilterStatusR(e.target.value)} className="input-field text-sm py-2 w-auto">
               <option value="">Semua Status</option>
               <option value="submitted">Sudah Kumpul</option>
               <option value="pending">Belum Kumpul</option>
@@ -554,22 +605,43 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="flex items-center justify-between bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-3">
+            <span className="text-sm text-red-300 font-medium">{selected.size} siswa dipilih</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSelected(new Set())} className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-800">
+                Batal
+              </button>
+              <button onClick={bulkDelete} disabled={bulkDeleting}
+                className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                {bulkDeleting
+                  ? <><div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin"/>Menghapus...</>
+                  : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>Hapus {selected.size} Siswa</>}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-800">
-                  <th className="text-left text-xs text-slate-500 font-medium p-4">Nama</th>
-                  <th className="text-left text-xs text-slate-500 font-medium p-4">Username</th>
-                  <th className="text-left text-xs text-slate-500 font-medium p-4 hidden sm:table-cell">Kelas</th>
-                  <th className="text-center text-xs text-slate-500 font-medium p-4">Status</th>
-                  <th className="text-center text-xs text-slate-500 font-medium p-4 hidden md:table-cell">Dikumpulkan</th>
-                  <th className="text-center text-xs text-slate-500 font-medium p-4">Aksi</th>
+                <tr className="border-b border-slate-800 bg-slate-900/50">
+                  <th className="p-3 w-10">
+                    <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked }}
+                      onChange={toggleAll} className="accent-amber-500 cursor-pointer" />
+                  </th>
+                  <th className="text-left text-xs text-slate-500 font-medium p-3 w-12">No</th>
+                  <th className="text-left text-xs text-slate-500 font-medium p-3">Nama</th>
+                  <th className="text-left text-xs text-slate-500 font-medium p-3">NPM</th>
+                  <th className="text-left text-xs text-slate-500 font-medium p-3 hidden sm:table-cell">Kelas</th>
+                  <th className="text-center text-xs text-slate-500 font-medium p-3">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && (
+                {paginated.length === 0 && (
                   <tr><td colSpan={6} className="text-center text-slate-500 p-10">
                     {students.length === 0
                       ? <div><p className="mb-3">Belum ada siswa terdaftar.</p>
@@ -577,33 +649,74 @@ export default function AdminPage() {
                       : 'Tidak ada siswa yang cocok.'}
                   </td></tr>
                 )}
-                {filtered.map(s => (
-                  <tr key={s.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors">
-                    <td className="p-4">
-                      <p className="font-medium text-slate-200">{s.full_name}</p>
-                      <p className="text-xs text-slate-500">{s.npm}</p>
+                {paginated.map((s, i) => (
+                  <tr key={s.id} className={`border-b border-slate-800/50 transition-colors ${selected.has(s.id) ? 'bg-amber-500/5' : 'hover:bg-slate-800/20'}`}>
+                    <td className="p-3 text-center">
+                      <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} className="accent-amber-500 cursor-pointer" />
                     </td>
-                    <td className="p-4 text-slate-300 font-mono text-sm">{s.username}</td>
-                    <td className="p-4 text-slate-400 text-sm hidden sm:table-cell">{s.kelas_nama || <span className="text-slate-600">—</span>}</td>
-                    <td className="p-4 text-center">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${s.is_submitted ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                        {s.is_submitted ? 'Dikumpulkan' : 'Belum'}
-                      </span>
+                    <td className="p-3 text-xs text-slate-600 tabular-nums">
+                      {(safePage - 1) * PAGE_SIZE + i + 1}
                     </td>
-                    <td className="p-4 text-center text-slate-500 text-xs hidden md:table-cell">
-                      {s.submitted_at ? new Date(s.submitted_at).toLocaleString('id-ID') : '—'}
+                    <td className="p-3">
+                      <p className="font-medium text-slate-200 text-sm">{s.full_name}</p>
+                      <p className="text-xs text-slate-500 font-mono">{s.username}</p>
                     </td>
-                    <td className="p-4 text-center">
-                      <button onClick={() => openEdit(s)} className="text-xs text-slate-400 hover:text-slate-200 font-medium px-2 py-1 rounded hover:bg-slate-800">Edit</button>
+                    <td className="p-3 text-slate-300 text-sm tabular-nums">{s.npm}</td>
+                    <td className="p-3 text-slate-400 text-sm hidden sm:table-cell">
+                      {s.kelas_nama || <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="p-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => openEdit(s)}
+                          className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 transition-colors">
+                          Edit
+                        </button>
+                        <button onClick={() => deleteStu(s.id)}
+                          className="text-xs text-red-500 hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10 transition-colors">
+                          Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination + info */}
           {filtered.length > 0 && (
-            <div className="px-4 py-2 border-t border-slate-800 text-xs text-slate-600">
-              {filtered.length} dari {students.length} siswa
+            <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between gap-4">
+              <p className="text-xs text-slate-500">
+                {filtered.length === students.length
+                  ? `${students.length} siswa`
+                  : `${filtered.length} dari ${students.length} siswa`}
+                {selected.size > 0 && <span className="text-amber-400 ml-2">· {selected.size} dipilih</span>}
+              </p>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                    className="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 hover:bg-slate-800 transition-colors">
+                    ‹ Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                    .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+                      if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…')
+                      acc.push(p); return acc
+                    }, [])
+                    .map((p, i) => p === '…'
+                      ? <span key={`e${i}`} className="px-1 text-xs text-slate-600">…</span>
+                      : <button key={p} onClick={() => setPage(p as number)}
+                          className={`w-7 h-7 rounded text-xs transition-colors ${safePage === p ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                          {p}
+                        </button>
+                    )}
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+                    className="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 hover:bg-slate-800 transition-colors">
+                    Next ›
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
