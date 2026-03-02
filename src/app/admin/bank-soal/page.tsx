@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -99,11 +100,11 @@ export default function BankSoalPage() {
       supabase.from('mata_pelajaran').select('id,nama,kode'),
       supabase.from('kelas').select('id,nama'),
     ])
-    setBankList((banks || []).map(b => ({
+    setBankList((banks || []).map((b: any) => ({
       ...b,
-      jumlah_soal: soal?.filter(q => q.bank_soal_id === b.id).length || 0,
-      mapel_list:  (bsm as any[])?.filter(r => r.bank_soal_id === b.id).map(r => r.mp).filter(Boolean) || [],
-      kelas_list:  (bsk as any[])?.filter(r => r.bank_soal_id === b.id).map(r => r.kl).filter(Boolean) || [],
+      jumlah_soal: soal?.filter((q: any) => q.bank_soal_id === b.id).length || 0,
+      mapel_list:  (bsm as any[])?.filter((r: any) => r.bank_soal_id === b.id).map((r: any) => r.mp).filter(Boolean) || [],
+      kelas_list:  (bsk as any[])?.filter((r: any) => r.bank_soal_id === b.id).map((r: any) => r.kl).filter(Boolean) || [],
     })))
   }
 
@@ -125,8 +126,8 @@ export default function BankSoalPage() {
       supabase.from('bank_soal_kelas').select('kelas_id').eq('bank_soal_id', b.id),
     ])
     setSoalList(soal || [])
-    setBMIds(bsm?.map(r => r.mata_pelajaran_id) || [])
-    setBKIds(bsk?.map(r => r.kelas_id) || [])
+    setBMIds(bsm?.map((r: any) => r.mata_pelajaran_id) || [])
+    setBKIds(bsk?.map((r: any) => r.kelas_id) || [])
     setView('bank-detail')
   }
 
@@ -156,7 +157,7 @@ export default function BankSoalPage() {
     if (bankMapelIds.includes(mapelId)) {
       await supabase.from('bank_soal_mapel').delete()
         .eq('bank_soal_id', selBank.id).eq('mata_pelajaran_id', mapelId)
-      setBMIds(p => p.filter(x => x !== mapelId))
+      setBMIds(p => p.filter((x: any) => x !== mapelId))
     } else {
       await supabase.from('bank_soal_mapel').insert({ bank_soal_id: selBank.id, mata_pelajaran_id: mapelId })
       setBMIds(p => [...p, mapelId])
@@ -169,7 +170,7 @@ export default function BankSoalPage() {
     if (bankKelasIds.includes(kelasId)) {
       await supabase.from('bank_soal_kelas').delete()
         .eq('bank_soal_id', selBank.id).eq('kelas_id', kelasId)
-      setBKIds(p => p.filter(x => x !== kelasId))
+      setBKIds(p => p.filter((x: any) => x !== kelasId))
     } else {
       await supabase.from('bank_soal_kelas').insert({ bank_soal_id: selBank.id, kelas_id: kelasId })
       setBKIds(p => [...p, kelasId])
@@ -197,7 +198,7 @@ export default function BankSoalPage() {
     // Auto-nomor: jika edit pakai nomor lama, jika baru pakai max+1
     let number = parseInt(soalFormNum) || 0
     if (!soalFormId || !number) {
-      const maxNum = soalList.reduce((m, q) => Math.max(m, q.number), 0)
+      const maxNum = soalList.reduce((m: any, q: any) => Math.max(m, q.number), 0)
       number = maxNum + 1
     }
 
@@ -251,10 +252,10 @@ export default function BankSoalPage() {
     reader.onload = async evt => {
       setImp(true)
       const lines = (evt.target?.result as string).trim().split('\n')
-      const rows = lines.slice(1).map(line => {
-        const cols = line.split(';').map(c => c.trim().replace(/^"|"$/g, ''))
+      const rows = lines.slice(1).map((line: any) => {
+        const cols = line.split(';').map((c: any) => c.trim().replace(/^"|"$/g, ''))
         return { number: parseInt(cols[0])||0, question: cols[1]||'', is_active: (cols[2]||'1')!=='0' }
-      }).filter(r => r.question && r.number > 0)
+      }).filter((r: any) => r.question && r.number > 0)
       for (const row of rows) {
         await supabase.from('questions').insert({
           ...row, bank_soal_id: selBank!.id, mata_pelajaran_id: bankMapelIds[0]||null
@@ -300,18 +301,18 @@ export default function BankSoalPage() {
   const openPenilaian = async (j: Jadwal) => {
     setSelJadwal(j)
     const { data: js } = await supabase.from('jadwal_soal').select('question_id,urutan').eq('jadwal_id', j.id).order('urutan')
-    const qIds = js?.map(r => r.question_id) || []
+    const qIds = js?.map((r: any) => r.question_id) || []
     const { data: qs } = qIds.length ? await supabase.from('questions').select('id,number,question').in('id', qIds) : { data: [] }
 
     const { data: jd } = await supabase.from('jadwal_ujian').select('kelas_id').eq('id', j.id).single()
     let stuIds: string[] = []
     if (jd?.kelas_id) {
       const { data: sk } = await supabase.from('siswa_kelas').select('student_id').eq('kelas_id', jd.kelas_id)
-      stuIds = sk?.map(r => r.student_id) || []
+      stuIds = sk?.map((r: any) => r.student_id) || []
     }
     if (!stuIds.length) {
       const { data: ex } = await supabase.from('exam_sessions').select('student_id').eq('jadwal_id', j.id)
-      stuIds = ex?.map(r => r.student_id) || []
+      stuIds = ex?.map((r: any) => r.student_id) || []
     }
     if (!stuIds.length) { setSessions([]); setView('penilaian'); return }
 
@@ -322,20 +323,20 @@ export default function BankSoalPage() {
       supabase.from('answers').select('id,answer_text,score,feedback,question_id,student_id').eq('jadwal_id', j.id),
     ])
 
-    const result: GradingSession[] = stuIds.map(sid => {
-      const prof   = profs?.find(p => p.id === sid)
-      const sess   = exSess?.find(s => s.student_id === sid)
-      const skRow  = (skRows as any[])?.find(r => r.student_id === sid)
-      const stuAns = (ans||[]).filter(a => a.student_id === sid).map(a => ({
-        ...a, question: (qs as any[])?.find(q => q.id === a.question_id) || { number: 0, question: '' }
+    const result: GradingSession[] = stuIds.map((sid: any) => {
+      const prof   = profs?.find((p: any) => p.id === sid)
+      const sess   = exSess?.find((s: any) => s.student_id === sid)
+      const skRow  = (skRows as any[])?.find((r: any) => r.student_id === sid)
+      const stuAns = (ans||[]).filter((a: any) => a.student_id === sid).map((a: any) => ({
+        ...a, question: (qs as any[])?.find((q: any) => q.id === a.question_id) || { number: 0, question: '' }
       })).sort((a,b) => a.question.number - b.question.number)
-      const graded = stuAns.filter(a => a.score !== null)
+      const graded = stuAns.filter((a: any) => a.score !== null)
       return {
         student_id: sid, full_name: prof?.full_name||'-', npm: prof?.npm||'-',
         username: prof?.username||'-', kelas: skRow?.kelas?.nama||'',
         submitted_at: sess?.submitted_at||null, is_submitted: sess?.is_submitted||false,
         answers: stuAns, graded_count: graded.length,
-        total_score: graded.length ? Math.round(graded.reduce((s,a)=>s+(a.score||0),0)/graded.length) : null,
+        total_score: graded.length ? Math.round(graded.reduce((s: any, a: any) =>s+(a.score||0),0)/graded.length) : null,
       }
     })
     setSessions(result); setSelSess(null); setView('penilaian')
@@ -344,7 +345,7 @@ export default function BankSoalPage() {
   const openSession = (s: GradingSession) => {
     setSelSess(s)
     const sm: Record<string,{score:string;feedback:string}> = {}
-    s.answers.forEach(a => { sm[a.id] = { score: a.score?.toString()||'', feedback: a.feedback||'' } })
+    s.answers.forEach((a: any) => { sm[a.id] = { score: a.score?.toString()||'', feedback: a.feedback||'' } })
     setScores(sm); setView('penilaian-detail')
   }
 
@@ -367,7 +368,7 @@ export default function BankSoalPage() {
   // ── Downloads ─────────────────────────────────────────────────
   const dlSiswa = (s: GradingSession) => {
     let t = `JAWABAN UJIAN\n${'='.repeat(60)}\nNama: ${s.full_name}\nNPM: ${s.npm}\nUsername: ${s.username}\nKelas: ${s.kelas||'-'}\nUjian: ${selJadwal?.nama}\nMapel: ${selJadwal?.mapel_nama||'-'}\nDikumpul: ${s.submitted_at ? new Date(s.submitted_at).toLocaleString('id-ID') : 'Belum'}\n${'='.repeat(60)}\n\n`
-    s.answers.forEach(a => {
+    s.answers.forEach((a: any) => {
       t += `SOAL ${a.question.number}\n${'-'.repeat(40)}\n${a.question.question}\n\nJAWABAN:\n${a.answer_text||'(kosong)'}\n`
       if (a.score!==null) t += `\nNilai: ${a.score}/100\nFeedback: ${a.feedback||'-'}\n`
       t += '\n'
@@ -380,14 +381,14 @@ export default function BankSoalPage() {
 
   const dlRekap = () => {
     const rows = [['Username','NPM','Nama','Kelas','Status','Dijawab','Dinilai','Rata-rata']]
-    sessions.forEach(s => rows.push([
+    sessions.forEach((s: any) => rows.push([
       s.username, s.npm, s.full_name, s.kelas||'-',
       s.is_submitted?'Dikumpulkan':'Belum',
-      s.answers.filter(a=>a.answer_text?.trim()).length.toString(),
+      s.answers.filter((a: any) =>a.answer_text?.trim()).length.toString(),
       s.graded_count.toString(),
       s.total_score!==null?s.total_score.toString():'-',
     ]))
-    const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n')
+    const csv = rows.map((r: any) =>r.map((v: any) =>`"${v}"`).join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     a.download = `rekap-${selJadwal?.nama.replace(/\s+/g,'-')}.csv`
@@ -398,7 +399,7 @@ export default function BankSoalPage() {
     let t = `REKAP JAWABAN — ${selJadwal?.nama}\n${'='.repeat(60)}\n\n`
     sessions.forEach((s,i) => {
       t += `[${i+1}] ${s.full_name} (${s.npm}) — ${s.is_submitted?'Dikumpulkan':'Belum'}\nRata-rata: ${s.total_score??'Belum dinilai'}\n\n`
-      s.answers.forEach(a => {
+      s.answers.forEach((a: any) => {
         t += `  Soal ${a.question.number}: ${a.question.question}\n  Jawaban: ${a.answer_text||'(kosong)'}\n`
         if (a.score!==null) t += `  Nilai: ${a.score} | Feedback: ${a.feedback||'-'}\n`
         t += '\n'
@@ -444,8 +445,8 @@ export default function BankSoalPage() {
   // ════════════════════════════════════════════════════════════
   if (view === 'soal-form') {
     const nextNum = soalFormId
-      ? parseInt(soalFormNum) || (soalList.reduce((m, q) => Math.max(m, q.number), 0))
-      : soalList.reduce((m, q) => Math.max(m, q.number), 0) + 1
+      ? parseInt(soalFormNum) || (soalList.reduce((m: any, q: any) => Math.max(m, q.number), 0))
+      : soalList.reduce((m: any, q: any) => Math.max(m, q.number), 0) + 1
     return (
       <div className="min-h-screen bg-slate-950">
         <Header title={soalFormId ? 'Edit Soal' : 'Tambah Soal'} sub={selBank?.nama}
@@ -490,9 +491,11 @@ export default function BankSoalPage() {
   // VIEW: PENILAIAN DETAIL
   // ════════════════════════════════════════════════════════════
   if (view === 'penilaian-detail' && selSession) {
-    const gradedNow = Object.values(scores).filter(s => s.score !== '').length
+    type ScoreEntry = { score: string; feedback: string }
+    const scoreValues = Object.values(scores) as ScoreEntry[]
+    const gradedNow = scoreValues.filter((s) => s.score !== '').length
     const avgNow    = gradedNow > 0
-      ? Math.round(Object.values(scores).filter(s=>s.score!=='').reduce((sum,s)=>sum+parseInt(s.score),0)/gradedNow)
+      ? Math.round(scoreValues.filter((s) => s.score !== '').reduce((sum: number, s: ScoreEntry) => sum + parseInt(s.score), 0) / gradedNow)
       : null
     return (
       <div className="min-h-screen bg-slate-950">
@@ -513,7 +516,7 @@ export default function BankSoalPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-center"><p className="text-xs text-slate-500">Dijawab</p><p className="font-bold text-slate-200">{selSession.answers.filter(a=>a.answer_text?.trim()).length}/{selSession.answers.length}</p></div>
+              <div className="text-center"><p className="text-xs text-slate-500">Dijawab</p><p className="font-bold text-slate-200">{selSession.answers.filter((a: any) =>a.answer_text?.trim()).length}/{selSession.answers.length}</p></div>
               <div className="text-center"><p className="text-xs text-slate-500">Dinilai</p><p className="font-bold text-amber-400">{gradedNow}/{selSession.answers.length}</p></div>
               <div className="text-center"><p className="text-xs text-slate-500">Rata-rata</p>
                 <p className={`font-bold text-lg ${avgNow!==null?(avgNow>=70?'text-green-400':'text-red-400'):'text-slate-600'}`}>{avgNow??'—'}</p></div>
@@ -523,7 +526,7 @@ export default function BankSoalPage() {
             </div>
           </div>
 
-          {selSession.answers.map(a => (
+          {selSession.answers.map((a: any) => (
             <div key={a.id} className="card p-5">
               <div className="flex items-center gap-2 mb-3">
                 <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-lg">Soal {a.question.number}</span>
@@ -582,8 +585,8 @@ export default function BankSoalPage() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           {[
             ['Total Siswa', sessions.length, 'text-slate-100'],
-            ['Sudah Kumpul', sessions.filter(s=>s.is_submitted).length, 'text-green-400'],
-            ['Selesai Dinilai', sessions.filter(s=>s.graded_count===s.answers.length&&s.answers.length>0).length, 'text-amber-400'],
+            ['Sudah Kumpul', sessions.filter((s: any) =>s.is_submitted).length, 'text-green-400'],
+            ['Selesai Dinilai', sessions.filter((s: any) =>s.graded_count===s.answers.length&&s.answers.length>0).length, 'text-amber-400'],
           ].map(([l,v,c]) => (
             <div key={l as string} className="card p-4 text-center">
               <p className={`text-2xl font-bold ${c}`}>{v}</p>
@@ -610,19 +613,19 @@ export default function BankSoalPage() {
           : <div className="card overflow-hidden">
               <table className="w-full">
                 <thead><tr className="border-b border-slate-800 bg-slate-800/30">
-                  {['Siswa','Username','Kelas','Status','Dijawab','Dinilai','Nilai','Aksi'].map(h =>
+                  {['Siswa','Username','Kelas','Status','Dijawab','Dinilai','Nilai','Aksi'].map((h: any) =>
                     <th key={h} className="text-left text-xs text-slate-500 font-medium p-3 first:pl-4">{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {sessions
-                    .filter(s => !gradSearch || s.full_name.toLowerCase().includes(gradSearch.toLowerCase()) || s.npm.includes(gradSearch) || s.username.toLowerCase().includes(gradSearch.toLowerCase()))
-                    .map(s => (
+                    .filter((s: any) => !gradSearch || s.full_name.toLowerCase().includes(gradSearch.toLowerCase()) || s.npm.includes(gradSearch) || s.username.toLowerCase().includes(gradSearch.toLowerCase()))
+                    .map((s: any) => (
                     <tr key={s.student_id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
                       <td className="p-3 pl-4"><p className="font-medium text-slate-200 text-sm">{s.full_name}</p><p className="text-xs text-slate-500">{s.npm}</p></td>
                       <td className="p-3 text-slate-400 font-mono text-sm">{s.username}</td>
                       <td className="p-3 text-slate-400 text-sm">{s.kelas||'—'}</td>
                       <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${s.is_submitted?'bg-green-500/10 text-green-400':'bg-slate-700 text-slate-500'}`}>{s.is_submitted?'Dikumpulkan':'Belum'}</span></td>
-                      <td className="p-3 text-center text-sm text-slate-300">{s.answers.filter(a=>a.answer_text?.trim()).length}/{s.answers.length}</td>
+                      <td className="p-3 text-center text-sm text-slate-300">{s.answers.filter((a: any) =>a.answer_text?.trim()).length}/{s.answers.length}</td>
                       <td className="p-3 text-center"><span className={`text-sm font-medium ${s.graded_count===s.answers.length&&s.answers.length>0?'text-green-400':'text-amber-400'}`}>{s.graded_count}/{s.answers.length}</span></td>
                       <td className="p-3 text-center"><span className={`text-sm font-bold ${s.total_score!==null?(s.total_score>=70?'text-green-400':'text-red-400'):'text-slate-600'}`}>{s.total_score??'—'}</span></td>
                       <td className="p-3">
@@ -651,7 +654,7 @@ export default function BankSoalPage() {
         {jadwalList.length===0
           ? <div className="card p-10 text-center text-slate-500">Belum ada jadwal untuk mapel di bank soal ini.</div>
           : <div className="space-y-2">
-              {jadwalList.map(j => (
+              {jadwalList.map((j: any) => (
                 <button key={j.id} onClick={() => openPenilaian(j)}
                   className="card p-5 w-full text-left hover:border-amber-500/30 transition-all group">
                   <div className="flex items-center justify-between gap-3">
@@ -703,7 +706,7 @@ export default function BankSoalPage() {
               </label>
             </div>
 
-            <p className="text-xs text-slate-500 mb-3">{soalList.filter(q=>q.is_active).length} aktif · {soalList.filter(q=>!q.is_active).length} nonaktif</p>
+            <p className="text-xs text-slate-500 mb-3">{soalList.filter((q: any) =>q.is_active).length} aktif · {soalList.filter((q: any) =>!q.is_active).length} nonaktif</p>
 
             {soalList.length===0
               ? <div className="card p-10 text-center text-slate-500">
@@ -711,7 +714,7 @@ export default function BankSoalPage() {
                   <p>Belum ada soal. Klik Tambah Soal atau Import CSV.</p>
                 </div>
               : <div className="space-y-2">
-                  {soalList.map(q => (
+                  {soalList.map((q: any) => (
                     <div key={q.id} className={`card p-4 flex items-start gap-3 ${!q.is_active?'opacity-50':''}`}>
                       <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                         <span className="text-amber-400 font-bold text-sm">{q.number}</span>
@@ -738,7 +741,7 @@ export default function BankSoalPage() {
               <h4 className="text-sm font-semibold text-slate-100 mb-1">Mata Pelajaran</h4>
               <p className="text-xs text-slate-500 mb-3">Soal bank ini dapat dipakai untuk mapel yang dicentang.</p>
               <div className="space-y-0.5 max-h-52 overflow-y-auto">
-                {mapelAll.map(m => (
+                {mapelAll.map((m: any) => (
                   <label key={m.id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer">
                     <input type="checkbox" checked={bankMapelIds.includes(m.id)}
                       onChange={() => toggleMapel(m.id)} className="accent-amber-500 flex-shrink-0"/>
@@ -756,7 +759,7 @@ export default function BankSoalPage() {
               <h4 className="text-sm font-semibold text-slate-100 mb-1">Kelas</h4>
               <p className="text-xs text-slate-500 mb-3">Siswa dari kelas yang dicentang bisa menggunakan bank soal ini.</p>
               <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                {kelasAll.map(k => (
+                {kelasAll.map((k: any) => (
                   <label key={k.id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer">
                     <input type="checkbox" checked={bankKelasIds.includes(k.id)}
                       onChange={() => toggleKelas(k.id)} className="accent-amber-500 flex-shrink-0"/>
@@ -834,7 +837,7 @@ export default function BankSoalPage() {
               <p>Belum ada bank soal. Buat yang pertama di atas.</p>
             </div>
           : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {bankList.map(b => (
+              {bankList.map((b: any) => (
                 <div key={b.id} className={`card p-5 hover:border-amber-500/30 transition-all group ${!b.is_active?'opacity-60':''}`}>
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-semibold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight">{b.nama}</h3>
@@ -850,14 +853,14 @@ export default function BankSoalPage() {
                   {/* Mapel & kelas badges */}
                   {b.mapel_list.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {b.mapel_list.map(m => (
+                      {b.mapel_list.map((m: any) => (
                         <span key={m.id} className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">{m.kode||m.nama}</span>
                       ))}
                     </div>
                   )}
                   {b.kelas_list.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">
-                      {b.kelas_list.map(k => (
+                      {b.kelas_list.map((k: any) => (
                         <span key={k.id} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{k.nama}</span>
                       ))}
                     </div>

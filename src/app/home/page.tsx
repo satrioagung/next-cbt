@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -55,7 +56,7 @@ export default function HomeSiswa() {
     // Cari kelas siswa
     const { data: sk } = await supabase
       .from('siswa_kelas').select('kelas_id').eq('student_id', userId)
-    const kelasIds = sk?.map(r => r.kelas_id) || []
+    const kelasIds = sk?.map((r: any) => r.kelas_id) || []
 
     // Ambil jadwal: hari ini dan 7 hari ke depan, yang kelasnya cocok
     const nextWeek = new Date()
@@ -82,7 +83,7 @@ export default function HomeSiswa() {
     if (!jadwals || jadwals.length === 0) { setJadwal([]); return }
 
     // Ambil sesi ujian siswa
-    const jadwalIds = jadwals.map(j => j.id)
+    const jadwalIds = jadwals.map((j: any) => j.id)
     const { data: sessions } = await supabase
       .from('exam_sessions')
       .select('jadwal_id, is_submitted, submitted_at')
@@ -104,9 +105,9 @@ export default function HomeSiswa() {
 
     const now = new Date()
     const cards: JadwalCard[] = jadwals.map((j: any) => {
-      const sess = sessions?.find(s => s.jadwal_id === j.id)
-      const jumlahSoal = jadwalSoal?.filter(js => js.jadwal_id === j.id).length || 0
-      const hasToken = tokens?.some(t => {
+      const sess = sessions?.find((s: any) => s.jadwal_id === j.id)
+      const jumlahSoal = jadwalSoal?.filter((js: any) => js.jadwal_id === j.id).length || 0
+      const hasToken = tokens?.some((t: any) => {
         if (t.jadwal_id !== j.id) return false
         if (t.expired_at && new Date(t.expired_at) < now) return false
         return t.is_active
@@ -154,8 +155,8 @@ export default function HomeSiswa() {
     </div>
   )
 
-  const todayCards   = jadwalList.filter(j => j.tanggal === today)
-  const upcomingCards = jadwalList.filter(j => j.tanggal > today)
+  const todayCards   = jadwalList.filter((j: any) => j.tanggal === today)
+  const upcomingCards = jadwalList.filter((j: any) => j.tanggal > today)
 
   const StatusBadge = ({ status }: { status: JadwalCard['status'] }) => {
     const map = {
@@ -168,7 +169,7 @@ export default function HomeSiswa() {
     return <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${s.cls}`}>{s.label}</span>
   }
 
-  const JadwalCard = ({ j }: { j: JadwalCard }) => {
+  const JadwalCard = ({ j }: { j: JadwalCard; key?: string | number }) => {
     const isToday = j.tanggal === today
     const canStart = isToday && (j.status === 'belum' || j.status === 'sedang') && j.jumlah_soal > 0
     const showTokenHint = canStart && !j.token_tersedia
@@ -308,7 +309,7 @@ export default function HomeSiswa() {
                   <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">Ujian Hari Ini</h3>
                 </div>
                 <div className="space-y-3">
-                  {todayCards.map(j => <JadwalCard key={j.id} j={j} />)}
+                  {todayCards.map((j: any) => <JadwalCard key={j.id} j={j} />)}
                 </div>
               </section>
             )}
@@ -321,7 +322,7 @@ export default function HomeSiswa() {
                   <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wider">Ujian Mendatang</h3>
                 </div>
                 <div className="space-y-3">
-                  {upcomingCards.map(j => <JadwalCard key={j.id} j={j} />)}
+                  {upcomingCards.map((j: any) => <JadwalCard key={j.id} j={j} />)}
                 </div>
               </section>
             )}

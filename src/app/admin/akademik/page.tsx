@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -96,7 +96,7 @@ export default function AkademikPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/auth/login'); return }
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
-    if (profile?.role !== 'admin') { router.push('/exam'); return }
+    if ((profile as { role?: string } | null)?.role !== 'admin') { router.push('/exam'); return }
     await loadAll()
     setLoading(false)
   }
@@ -120,20 +120,20 @@ export default function AkademikPage() {
       supabase.from('bank_soal_mapel').select('bank_soal_id,mata_pelajaran_id'),
     ])
 
-    const kelasFull = (k.data || []).map(kl => ({
+    const kelasFull = (k.data || []).map((kl: any) => ({
       ...kl,
-      jumlah_siswa: sk.data?.filter(r => r.kelas_id === kl.id).length || 0,
-      jumlah_mapel: mk.data?.filter(r => r.kelas_id === kl.id).length || 0,
+      jumlah_siswa: sk.data?.filter((r: any) => r.kelas_id === kl.id).length || 0,
+      jumlah_mapel: mk.data?.filter((r: any) => r.kelas_id === kl.id).length || 0,
     }))
-    const mapelFull = (m.data || []).map(mp => ({
+    const mapelFull = (m.data || []).map((mp: any) => ({
       ...mp,
-      jumlah_soal:  q.data?.filter(r => r.mata_pelajaran_id === mp.id || bsm.data?.some(b => b.mata_pelajaran_id === mp.id && q.data?.some(qq => qq.bank_soal_id === b.bank_soal_id))).length || 0,
-      jumlah_kelas: mk.data?.filter(r => r.mata_pelajaran_id === mp.id).length || 0,
-      jumlah_bank:  bsm.data?.filter(r => r.mata_pelajaran_id === mp.id).length || 0,
+      jumlah_soal:  q.data?.filter((r: any) => r.mata_pelajaran_id === mp.id || bsm.data?.some((b: any) => b.mata_pelajaran_id === mp.id && q.data?.some((qq: any) => qq.bank_soal_id === b.bank_soal_id))).length || 0,
+      jumlah_kelas: mk.data?.filter((r: any) => r.mata_pelajaran_id === mp.id).length || 0,
+      jumlah_bank:  bsm.data?.filter((r: any) => r.mata_pelajaran_id === mp.id).length || 0,
     }))
     const bankFull = (bs.data || []).map((b: any) => ({
       ...b,
-      jumlah_soal: q.data?.filter(r => r.bank_soal_id === b.id).length || 0,
+      jumlah_soal: q.data?.filter((r: any) => r.bank_soal_id === b.id).length || 0,
     }))
 
     setKelasList(kelasFull)
@@ -176,7 +176,7 @@ export default function AkademikPage() {
 
   const openSiswaKelas = async (k: Kelas) => {
     const { data } = await supabase.from('siswa_kelas').select('student_id').eq('kelas_id', k.id)
-    setKelasStudents(data?.map(d => d.student_id) || [])
+    setKelasStudents(data?.map((d: any) => d.student_id) || [])
     setPanel({ type: 'kelas-siswa', kelasId: k.id, kelasNama: k.nama })
   }
 
@@ -184,7 +184,7 @@ export default function AkademikPage() {
     if (panel.type !== 'kelas-siswa') return
     if (kelasStudents.includes(studentId)) {
       await supabase.from('siswa_kelas').delete().eq('kelas_id', panel.kelasId).eq('student_id', studentId)
-      setKelasStudents(p => p.filter(id => id !== studentId))
+      setKelasStudents(p => p.filter((id: any) => id !== studentId))
     } else {
       await supabase.from('siswa_kelas').insert({ kelas_id: panel.kelasId, student_id: studentId })
       setKelasStudents(p => [...p, studentId])
@@ -194,7 +194,7 @@ export default function AkademikPage() {
 
   const openKelasMapel = async (k: Kelas) => {
     const { data } = await supabase.from('mapel_kelas').select('mata_pelajaran_id').eq('kelas_id', k.id)
-    setKelasMapelIds(data?.map(d => d.mata_pelajaran_id) || [])
+    setKelasMapelIds(data?.map((d: any) => d.mata_pelajaran_id) || [])
     setPanel({ type: 'kelas-mapel', kelasId: k.id, kelasNama: k.nama })
   }
 
@@ -202,7 +202,7 @@ export default function AkademikPage() {
     if (panel.type !== 'kelas-mapel') return
     if (kelasMapelIds.includes(mapelId)) {
       await supabase.from('mapel_kelas').delete().eq('kelas_id', panel.kelasId).eq('mata_pelajaran_id', mapelId)
-      setKelasMapelIds(p => p.filter(id => id !== mapelId))
+      setKelasMapelIds(p => p.filter((id: any) => id !== mapelId))
     } else {
       await supabase.from('mapel_kelas').insert({ kelas_id: panel.kelasId, mata_pelajaran_id: mapelId })
       setKelasMapelIds(p => [...p, mapelId])
@@ -237,10 +237,10 @@ export default function AkademikPage() {
     // Load bank soal yang terhubung ke mapel ini
     const { data: bsm } = await supabase
       .from('bank_soal_mapel').select('bank_soal_id').eq('mata_pelajaran_id', m.id)
-    const bankIds = bsm?.map(r => r.bank_soal_id) || []
+    const bankIds = bsm?.map((r: any) => r.bank_soal_id) || []
     const banks = bankSoalList
-      .filter(b => bankIds.includes(b.id))
-      .map(b => ({ ...b, jumlah_soal: soalList.filter(q => q.bank_soal_id === b.id).length }))
+      .filter((b: any) => bankIds.includes(b.id))
+      .map((b: any) => ({ ...b, jumlah_soal: soalList.filter((q: any) => q.bank_soal_id === b.id).length }))
     setBSFM(banks)
     setPanel({ type: 'mapel-bank', mapelId: m.id, mapelNama: m.nama })
   }
@@ -258,9 +258,9 @@ export default function AkademikPage() {
     // Reopen panel with fresh data
     const { data: bsm } = await supabase
       .from('bank_soal_mapel').select('bank_soal_id').eq('mata_pelajaran_id', mapelId)
-    const bankIds = bsm?.map(r => r.bank_soal_id) || []
+    const bankIds = bsm?.map((r: any) => r.bank_soal_id) || []
     const { data: freshBanks } = await supabase.from('bank_soal').select('*').in('id', bankIds)
-    const banks = (freshBanks || []).map(b => ({ ...b, jumlah_soal: soalList.filter(q => q.bank_soal_id === b.id).length }))
+    const banks = (freshBanks || []).map((b: any) => ({ ...b, jumlah_soal: soalList.filter((q: any) => q.bank_soal_id === b.id).length }))
     setBSFM(banks)
     flash('✅ Bank soal dibuat!')
   }
@@ -274,7 +274,7 @@ export default function AkademikPage() {
   // Relasi mapel → kelas
   const openMapelKelas = async (m: Mapel) => {
     const { data } = await supabase.from('mapel_kelas').select('kelas_id').eq('mata_pelajaran_id', m.id)
-    setMapelKelasIds(data?.map(d => d.kelas_id) || [])
+    setMapelKelasIds(data?.map((d: any) => d.kelas_id) || [])
     setPanel({ type: 'mapel-kelas', mapelId: m.id, mapelNama: m.nama })
   }
 
@@ -282,7 +282,7 @@ export default function AkademikPage() {
     if (panel.type !== 'mapel-kelas') return
     if (mapelKelasIds.includes(kelasId)) {
       await supabase.from('mapel_kelas').delete().eq('mata_pelajaran_id', panel.mapelId).eq('kelas_id', kelasId)
-      setMapelKelasIds(p => p.filter(id => id !== kelasId))
+      setMapelKelasIds(p => p.filter((id: any) => id !== kelasId))
     } else {
       await supabase.from('mapel_kelas').insert({ mata_pelajaran_id: panel.mapelId, kelas_id: kelasId })
       setMapelKelasIds(p => [...p, kelasId])
@@ -303,8 +303,8 @@ export default function AkademikPage() {
     // Auto-nomor: max+1 untuk soal baru, pertahankan untuk edit
     let number = parseInt(soalForm.number) || 0
     if (!panel.id || !number) {
-      const soalDiBank = soalList.filter(q => q.bank_soal_id === panel.bankId)
-      number = soalDiBank.reduce((m, q) => Math.max(m, q.number), 0) + 1
+      const soalDiBank = soalList.filter((q: any) => q.bank_soal_id === panel.bankId)
+      number = soalDiBank.reduce((m: any, q: any) => Math.max(m, q.number), 0) + 1
     }
     const payload = {
       number,
@@ -317,8 +317,8 @@ export default function AkademikPage() {
       ? await supabase.from('questions').update(payload).eq('id', panel.id)
       : await supabase.from('questions').insert(payload)
     await loadAll(); setSaving(false)
-    const bank = bankSoalList.find(b => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
-    const mapel = mapelList.find(m => m.id === panel.mapelId)
+    const bank = bankSoalList.find((b: any) => b.id === panel.bankId) || { id: panel.bankId, nama: '—', deskripsi: '', is_active: true }
+    const mapel = mapelList.find((m: any) => m.id === panel.mapelId)
     setPanel({ type: 'mapel-soal', mapelId: panel.mapelId, mapelNama: mapel?.nama || '—', bankId: panel.bankId, bankNama: bank.nama })
     flash('✅ Soal disimpan!')
   }
@@ -379,7 +379,7 @@ export default function AkademikPage() {
         .eq('is_active', true)
         .order('number')
       if (soalBank?.length) {
-        const inserts = soalBank.map((q, i) => ({ jadwal_id: jadwalId, question_id: q.id, urutan: i + 1 }))
+        const inserts = soalBank.map((q: any, i: any) => ({ jadwal_id: jadwalId, question_id: q.id, urutan: i + 1 }))
         await supabase.from('jadwal_soal').insert(inserts)
         flash(`✅ Jadwal disimpan! ${soalBank.length} soal otomatis ditambahkan.`)
       } else {
@@ -448,7 +448,7 @@ export default function AkademikPage() {
 
   const openJadwalSoal = async (j: Jadwal) => {
     const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', j.id)
-    setJadwalSoalIds(data?.map(d => d.question_id) || [])
+    setJadwalSoalIds(data?.map((d: any) => d.question_id) || [])
     setPanel({ type: 'jadwal-soal', jadwalId: j.id, jadwalNama: j.nama, jadwalMapelId: j.mata_pelajaran_id || '' })
   }
 
@@ -456,7 +456,7 @@ export default function AkademikPage() {
     if (panel.type !== 'jadwal-soal') return
     if (jadwalSoalIds.includes(questionId)) {
       await supabase.from('jadwal_soal').delete().eq('jadwal_id', panel.jadwalId).eq('question_id', questionId)
-      setJadwalSoalIds(p => p.filter(id => id !== questionId))
+      setJadwalSoalIds(p => p.filter((id: any) => id !== questionId))
     } else {
       await supabase.from('jadwal_soal').insert({ jadwal_id: panel.jadwalId, question_id: questionId, urutan: jadwalSoalIds.length + 1 })
       setJadwalSoalIds(p => [...p, questionId])
@@ -468,32 +468,32 @@ export default function AkademikPage() {
     if (panel.type !== 'jadwal-soal') return
     // Ambil semua soal aktif yang terkait dengan mapel jadwal ini
     const mapelId = panel.jadwalMapelId
-    const eligible = getSoalForMapel(mapelId).filter(q => !jadwalSoalIds.includes(q.id))
+    const eligible = getSoalForMapel(mapelId).filter((q: any) => !jadwalSoalIds.includes(q.id))
     for (let i = 0; i < eligible.length; i++) {
       await supabase.from('jadwal_soal').insert({ jadwal_id: panel.jadwalId, question_id: eligible[i].id, urutan: jadwalSoalIds.length + i + 1 })
     }
     const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', panel.jadwalId)
-    setJadwalSoalIds(data?.map(d => d.question_id) || [])
+    setJadwalSoalIds(data?.map((d: any) => d.question_id) || [])
     await loadAll()
   }
 
   const selectAllSoalMapel = async (mapelId: string) => {
     if (panel.type !== 'jadwal-soal') return
-    const filtered = getSoalForMapel(mapelId).filter(q => !jadwalSoalIds.includes(q.id))
+    const filtered = getSoalForMapel(mapelId).filter((q: any) => !jadwalSoalIds.includes(q.id))
     for (let i = 0; i < filtered.length; i++) {
       await supabase.from('jadwal_soal').insert({ jadwal_id: panel.jadwalId, question_id: filtered[i].id, urutan: jadwalSoalIds.length + i + 1 })
     }
     const { data } = await supabase.from('jadwal_soal').select('question_id').eq('jadwal_id', panel.jadwalId)
-    setJadwalSoalIds(data?.map(d => d.question_id) || [])
+    setJadwalSoalIds(data?.map((d: any) => d.question_id) || [])
     await loadAll()
   }
 
   // Ambil semua soal aktif untuk mapel tertentu (via mata_pelajaran_id langsung ATAU via bank_soal_mapel)
   const getSoalForMapel = (mapelId: string) => {
-    if (!mapelId) return soalList.filter(q => q.is_active)
+    if (!mapelId) return soalList.filter((q: any) => q.is_active)
     // Bank soal yang terhubung ke mapel ini
-    const bankIds = bsmData.filter(r => r.mata_pelajaran_id === mapelId).map(r => r.bank_soal_id)
-    return soalList.filter(q => q.is_active && (
+    const bankIds = bsmData.filter((r: any) => r.mata_pelajaran_id === mapelId).map((r: any) => r.bank_soal_id)
+    return soalList.filter((q: any) => q.is_active && (
       q.mata_pelajaran_id === mapelId ||
       (q.bank_soal_id && bankIds.includes(q.bank_soal_id))
     ))
@@ -538,7 +538,7 @@ export default function AkademikPage() {
     { key: 'kelas',  label: 'Kelas',         icon: 'users',    count: kelasList.length },
     { key: 'mapel',  label: 'Mata Pelajaran', icon: 'book',     count: mapelList.length },
     { key: 'jadwal', label: 'Jadwal Ujian',   icon: 'calendar', count: jadwalList.length },
-    { key: 'token',  label: 'Token',          icon: 'key',      count: tokenList.filter(t => t.is_active).length },
+    { key: 'token',  label: 'Token',          icon: 'key',      count: tokenList.filter((t: any) => t.is_active).length },
   ]
 
   const panelOpen = panel.type !== 'none'
@@ -570,7 +570,7 @@ export default function AkademikPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-5 bg-slate-900 border border-slate-800 rounded-xl p-1 overflow-x-auto">
-          {TABS.map(t => (
+          {TABS.map((t) => (
             <button key={t.key}
               onClick={() => { setActiveTab(t.key); closePanel() }}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-1 justify-center ${activeTab === t.key ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}>
@@ -595,7 +595,7 @@ export default function AkademikPage() {
                 <ListHeader title="Daftar Kelas" onAdd={() => openKelasForm()} />
                 <Empty show={kelasList.length === 0} />
                 <div className="space-y-2">
-                  {kelasList.map(k => (
+                  {kelasList.map((k: any) => (
                     <div key={k.id} className="card p-4 flex items-center gap-3">
                       <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
                         <span className="text-amber-400 font-bold text-sm">{k.tingkat || '?'}</span>
@@ -624,7 +624,7 @@ export default function AkademikPage() {
                 <ListHeader title="Mata Pelajaran" onAdd={() => openMapelForm()} addLabel="Tambah Mapel" />
                 <Empty show={mapelList.length === 0} />
                 <div className="grid sm:grid-cols-2 gap-3">
-                  {mapelList.map(m => (
+                  {mapelList.map((m: any) => (
                     <div key={m.id} className="card p-5 hover:border-slate-700 transition-colors group">
                       {/* Card header */}
                       <div className="flex items-start justify-between mb-3">
@@ -678,7 +678,7 @@ export default function AkademikPage() {
                 <ListHeader title="Jadwal Ujian" onAdd={() => openJadwalForm()} addLabel="Buat Jadwal" />
                 <Empty show={jadwalList.length === 0} />
                 <div className="space-y-2">
-                  {jadwalList.map(j => (
+                  {jadwalList.map((j: any) => (
                     <div key={j.id} className={`card p-4 ${!j.is_active ? 'opacity-60' : ''}`}>
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
@@ -717,7 +717,7 @@ export default function AkademikPage() {
                 <ListHeader title="Token Ujian" onAdd={() => setPanel({ type: 'token-gen' })} addLabel="Generate Token" />
                 <Empty show={tokenList.length === 0} />
                 <div className="space-y-2">
-                  {tokenList.map(t => {
+                  {tokenList.map((t: any) => {
                     const isExpired = t.expired_at ? new Date(t.expired_at) < new Date() : false
                     const isActive  = t.is_active && !isExpired
                     return (
@@ -759,7 +759,7 @@ export default function AkademikPage() {
                   <F label="Tingkat">
                     <select value={kelasForm.tingkat} onChange={e => setKF(p => ({ ...p, tingkat: e.target.value }))} className="input-field">
                       <option value="">Pilih tingkat</option>
-                      {['X','XI','XII','1','2','3','4','5','6','7','8'].map(t => <option key={t}>{t}</option>)}
+                      {['X','XI','XII','1','2','3','4','5','6','7','8'].map((t: any) => <option key={t}>{t}</option>)}
                     </select>
                   </F>
                   <PA onSave={saveKelas} onCancel={closePanel} saving={saving} disabled={!kelasForm.nama} />
@@ -770,7 +770,7 @@ export default function AkademikPage() {
               {panel.type === 'kelas-siswa' && (
                 <Panel title={`Siswa — ${panel.kelasNama}`} onClose={closePanel}>
                   <p className="text-xs text-slate-500 mb-2">{kelasStudents.length}/{students.length} dipilih</p>
-                  <CheckList items={students} selected={kelasStudents} onToggle={s => toggleSiswaKelas(s.id)}
+                  <CheckList<Student> items={students} selected={kelasStudents} onToggle={s => toggleSiswaKelas(s.id)}
                     getLabel={s => s.full_name} getSub={s => s.npm} emptyText="Belum ada siswa." />
                 </Panel>
               )}
@@ -779,7 +779,7 @@ export default function AkademikPage() {
               {panel.type === 'kelas-mapel' && (
                 <Panel title={`Mapel — ${panel.kelasNama}`} onClose={closePanel}>
                   <p className="text-xs text-slate-500 mb-2">{kelasMapelIds.length} mapel dipilih</p>
-                  <CheckList items={mapelList} selected={kelasMapelIds} onToggle={m => toggleKelasMapel(m.id)}
+                  <CheckList<Mapel> items={mapelList} selected={kelasMapelIds} onToggle={m => toggleKelasMapel(m.id)}
                     getLabel={m => m.nama} getSub={m => `${m.kode || '—'} · ${m.jumlah_soal} soal`} emptyText="Belum ada mata pelajaran." />
                 </Panel>
               )}
@@ -806,7 +806,7 @@ export default function AkademikPage() {
                     {bankSoalForMapel.length === 0 && (
                       <p className="text-xs text-slate-600 text-center py-8">Belum ada bank soal untuk mata pelajaran ini.</p>
                     )}
-                    {bankSoalForMapel.map(b => (
+                    {bankSoalForMapel.map((b: any) => (
                       <div key={b.id} className="bg-slate-800/50 rounded-xl p-3 border border-slate-800 hover:border-slate-700 transition-colors">
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="min-w-0">
@@ -839,10 +839,10 @@ export default function AkademikPage() {
                     <Icon d={IC.plus} className="w-3.5 h-3.5" /> Tambah Soal Baru
                   </button>
                   <div className="space-y-2 max-h-[65vh] overflow-y-auto">
-                    {soalList.filter(q => q.bank_soal_id === panel.bankId).length === 0 && (
+                    {soalList.filter((q: any) => q.bank_soal_id === panel.bankId).length === 0 && (
                       <p className="text-xs text-slate-600 text-center py-8">Belum ada soal. Klik tombol di atas untuk menambah.</p>
                     )}
-                    {soalList.filter(q => q.bank_soal_id === panel.bankId).map(q => (
+                    {soalList.filter((q: any) => q.bank_soal_id === panel.bankId).map((q: any) => (
                       <div key={q.id} className={`bg-slate-800/50 rounded-xl p-3 border border-slate-800 ${!q.is_active ? 'opacity-50' : ''}`}>
                         <div className="flex items-start justify-between gap-2 mb-1.5">
                           <span className="text-xs text-amber-500 font-semibold">#{q.number}</span>
@@ -861,12 +861,12 @@ export default function AkademikPage() {
 
               {/* Soal Form */}
               {panel.type === 'soal-form' && (() => {
-                const soalDiBank = soalList.filter(q => q.bank_soal_id === panel.bankId)
+                const soalDiBank = soalList.filter((q: any) => q.bank_soal_id === panel.bankId)
                 const nextNum = panel.id
-                  ? (parseInt(soalForm.number) || soalDiBank.reduce((m, q) => Math.max(m, q.number), 0))
-                  : soalDiBank.reduce((m, q) => Math.max(m, q.number), 0) + 1
-                const bank = bankSoalList.find(b => b.id === panel.bankId)
-                const mapel = mapelList.find(m => m.id === panel.mapelId)
+                  ? (parseInt(soalForm.number) || soalDiBank.reduce((m: any, q: any) => Math.max(m, q.number), 0))
+                  : soalDiBank.reduce((m: any, q: any) => Math.max(m, q.number), 0) + 1
+                const bank = bankSoalList.find((b: any) => b.id === panel.bankId)
+                const mapel = mapelList.find((m: any) => m.id === panel.mapelId)
                 return (
                   <Panel title={panel.id ? 'Edit Soal' : 'Tambah Soal'}
                     sub={`${bank?.nama || '—'} · ${mapel?.nama || '—'}`}
@@ -895,15 +895,15 @@ export default function AkademikPage() {
               {panel.type === 'mapel-kelas' && (
                 <Panel title={`Kelas — ${panel.mapelNama}`} onClose={closePanel}>
                   <p className="text-xs text-slate-500 mb-2">{mapelKelasIds.length} kelas dipilih</p>
-                  <CheckList items={kelasList} selected={mapelKelasIds} onToggle={k => toggleMapelKelas(k.id)}
-                    getLabel={k => k.nama} getSub={k => `${k.jumlah_siswa} siswa`} emptyText="Belum ada kelas." />
+                  <CheckList<Kelas> items={kelasList} selected={mapelKelasIds} onToggle={k => toggleMapelKelas(k.id)}
+                    getLabel={k => k.nama} getSub={k => `${k.jumlah_siswa ?? 0} siswa`} emptyText="Belum ada kelas." />
                 </Panel>
               )}
 
               {/* Jadwal Form */}
               {panel.type === 'jadwal-form' && (() => {
-                const selBank = bankSoalList.find(b => b.id === jadwalForm.bank_soal_id)
-                const soalAktif = soalList.filter(q => q.bank_soal_id === jadwalForm.bank_soal_id && q.is_active).length
+                const selBank = bankSoalList.find((b: any) => b.id === jadwalForm.bank_soal_id)
+                const soalAktif = soalList.filter((q: any) => q.bank_soal_id === jadwalForm.bank_soal_id && q.is_active).length
                 return (
                   <Panel title={panel.id ? 'Edit Jadwal' : 'Buat Jadwal Ujian'} onClose={closePanel}>
                     <F label="Nama Ujian">
@@ -913,7 +913,7 @@ export default function AkademikPage() {
                     <F label="Bank Soal">
                       <select value={jadwalForm.bank_soal_id} onChange={e => onBankSoalChange(e.target.value)} className="input-field">
                         <option value="">Pilih bank soal</option>
-                        {bankSoalList.map(b => (
+                        {bankSoalList.map((b: any) => (
                           <option key={b.id} value={b.id}>{b.nama} ({b.jumlah_soal || 0} soal)</option>
                         ))}
                       </select>
@@ -933,7 +933,7 @@ export default function AkademikPage() {
                           <option value="">
                             {bankKelasForJadwal.length === 1 ? `${bankKelasForJadwal[0].nama} (otomatis)` : 'Pilih kelas'}
                           </option>
-                          {bankKelasForJadwal.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                          {bankKelasForJadwal.map((k: any) => <option key={k.id} value={k.id}>{k.nama}</option>)}
                         </select>
                       )}
                     </F>
@@ -955,7 +955,7 @@ export default function AkademikPage() {
               {/* Assign Soal ke Jadwal */}
               {panel.type === 'jadwal-soal' && (() => {
                 const soalUntukJadwal = getSoalForMapel(panel.jadwalMapelId)
-                const belumDipilih = soalUntukJadwal.filter(q => !jadwalSoalIds.includes(q.id))
+                const belumDipilih = soalUntukJadwal.filter((q: any) => !jadwalSoalIds.includes(q.id))
                 return (
                   <Panel title={`Soal — ${panel.jadwalNama}`} onClose={closePanel}>
                     <div className="flex items-center justify-between mb-2">
@@ -974,7 +974,7 @@ export default function AkademikPage() {
                           <p className="text-xs text-slate-700">Tambahkan soal dulu di tab Mata Pelajaran → Bank Soal.</p>
                         </div>
                       )}
-                      {soalUntukJadwal.map(q => (
+                      {soalUntukJadwal.map((q: any) => (
                         <label key={q.id} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800 cursor-pointer">
                           <input type="checkbox" checked={jadwalSoalIds.includes(q.id)}
                             onChange={() => toggleJadwalSoal(q.id)} className="accent-amber-500 mt-0.5 flex-shrink-0" />
@@ -995,7 +995,7 @@ export default function AkademikPage() {
                   <F label="Jadwal Ujian">
                     <select value={tokenForm.jadwal_id} onChange={e => setTF(p => ({ ...p, jadwal_id: e.target.value }))} className="input-field">
                       <option value="">Pilih jadwal</option>
-                      {jadwalList.filter(j => j.is_active).map(j => (
+                      {jadwalList.filter((j: any) => j.is_active).map((j: any) => (
                         <option key={j.id} value={j.id}>{j.mapel_kode} — {j.kelas_nama} — {j.nama}</option>
                       ))}
                     </select>
@@ -1010,7 +1010,7 @@ export default function AkademikPage() {
                   </button>
                   <div className="mt-4 pt-4 border-t border-slate-800 space-y-1">
                     <p className="text-xs text-slate-500 font-medium">Cara kerja:</p>
-                    {['Generate token untuk jadwal ujian', 'Bagikan kode 6-digit ke siswa saat ujian', 'Siswa input token → sistem validasi kelas', 'Soal yang muncul sesuai yang diassign ke jadwal', 'Nonaktifkan token setelah ujian selesai'].map((t, i) => (
+                    {['Generate token untuk jadwal ujian', 'Bagikan kode 6-digit ke siswa saat ujian', 'Siswa input token → sistem validasi kelas', 'Soal yang muncul sesuai yang diassign ke jadwal', 'Nonaktifkan token setelah ujian selesai'].map((t: any, i: any) => (
                       <p key={i} className="text-xs text-slate-600">{i+1}. {t}</p>
                     ))}
                   </div>
@@ -1060,7 +1060,8 @@ function Btn({ label, onClick, danger }: { label: string; onClick: () => void; d
   )
 }
 
-function Panel({ title, sub, children, onClose }: { title: string; sub?: string; children: React.ReactNode; onClose: () => void }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Panel({ title, sub, children, onClose }: { title: string; sub?: string; children?: any; onClose: () => void }) {
   return (
     <div className="card p-5 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
@@ -1079,7 +1080,8 @@ function Panel({ title, sub, children, onClose }: { title: string; sub?: string;
   )
 }
 
-function F({ label, children }: { label: string; children: React.ReactNode }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function F({ label, children }: { label: string; children?: any }) {
   return (
     <div>
       <label className="block text-xs text-slate-400 mb-1.5 font-medium">{label}</label>
@@ -1108,7 +1110,7 @@ function CheckList<T extends { id: string }>({
   return (
     <div className="space-y-0.5 max-h-[60vh] overflow-y-auto">
       {items.length === 0 && <p className="text-xs text-slate-600 text-center py-6">{emptyText}</p>}
-      {items.map(item => (
+      {items.map((item: any) => (
         <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-800 cursor-pointer">
           <input type="checkbox" checked={selected.includes(item.id)} onChange={() => onToggle(item)} className="accent-amber-500 flex-shrink-0" />
           <div className="min-w-0">

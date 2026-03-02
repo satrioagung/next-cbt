@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -56,9 +57,10 @@ export default function AdminPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/auth/login'); return }
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
-    if (profile?.role !== 'admin') { router.push('/home'); return }
+    const p = profile as { id: string; role?: string; full_name?: string; npm?: string } | null
+    if (p?.role !== 'admin') { router.push('/home'); return }
     const { data: { user } } = await supabase.auth.getUser()
-    const ap = { id: profile.id, full_name: profile.full_name || '', npm: profile.npm || '', email: user?.email || '' }
+    const ap = { id: p!.id, full_name: p!.full_name || '', npm: p!.npm || '', email: user?.email || '' }
     setAdmin(ap); setAF(ap)
     await loadData()
     setLoading(false)
@@ -72,9 +74,9 @@ export default function AdminPage() {
       supabase.from('siswa_kelas').select('student_id,kelas:kelas_id(nama)'),
       supabase.from('kelas').select('id,nama').order('nama'),
     ])
-    const list: Student[] = (profiles.data || []).map(p => {
-      const sess  = sessions.data?.find(s => s.student_id === p.id)
-      const skRow = (sk.data as any[])?.find(r => r.student_id === p.id)
+    const list: Student[] = (profiles.data || []).map((p: any) => {
+      const sess  = sessions.data?.find((s: any) => s.student_id === p.id)
+      const skRow = (sk.data as any[])?.find((r: any) => r.student_id === p.id)
       return {
         id: p.id,
         full_name:    p.full_name   || '-',
@@ -83,10 +85,10 @@ export default function AdminPage() {
         email:        p.email       || '-',
         is_submitted: sess?.is_submitted   || false,
         submitted_at: sess?.submitted_at   || null,
-        answer_count: answers.data?.filter(a => a.student_id === p.id).length || 0,
+        answer_count: answers.data?.filter((a: any) => a.student_id === p.id).length || 0,
         kelas_nama:   skRow?.kelas?.nama   || '',
       }
-    }).sort((a, b) => a.full_name.localeCompare(b.full_name))
+    }).sort((a: Student, b: Student) => a.full_name.localeCompare(b.full_name))
     setStudents(list)
     setKelasList(kelas.data || [])
   }
@@ -107,7 +109,7 @@ export default function AdminPage() {
   // ── Edit student ──────────────────────────────────────────────
   const openEdit = (s: Student) => {
     setSelStudent(s)
-    const kelasRow = kelasList.find(k => k.nama === s.kelas_nama)
+    const kelasRow = kelasList.find((k: any) => k.nama === s.kelas_nama)
     setSF({ full_name: s.full_name, npm: s.npm, username: s.username === '-' ? '' : s.username, kelas_id: kelasRow?.id || '' })
     setSM(''); setView('edit-student')
   }
@@ -163,8 +165,8 @@ export default function AdminPage() {
     const reader = new FileReader()
     reader.onload = evt => {
       const lines = (evt.target?.result as string).trim().split('\n')
-      const rows: ImportRow[] = lines.slice(1).map(line => {
-        const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+      const rows: ImportRow[] = lines.slice(1).map((line: any) => {
+        const cols = line.split(',').map((c: any) => c.trim().replace(/^"|"$/g, ''))
         return {
           full_name:  cols[0] || '',
           npm:        cols[1] || '',
@@ -172,7 +174,7 @@ export default function AdminPage() {
           password:   cols[3] || 'password123',
           kelas_nama: cols[4] || '',
         }
-      }).filter(r => r.full_name && r.username)
+      }).filter((r: any) => r.full_name && r.username)
       setImportData(rows); setIR(null)
     }
     reader.readAsText(file)
@@ -185,7 +187,7 @@ export default function AdminPage() {
 
     for (const row of importData) {
       // Buat email internal dari username (tidak diekspos ke siswa)
-      const fakeEmail = `${row.username.toLowerCase().replace(/\s+/g, '')}@bintang9`
+      const fakeEmail = `${row.username.toLowerCase().replace(/\s+/g, '')}@uts-internal.local`
 
       const { data, error } = await supabase.auth.signUp({
         email: fakeEmail,
@@ -206,7 +208,7 @@ export default function AdminPage() {
 
         // Assign ke kelas jika ada
         if (row.kelas_nama) {
-          const k = kelasList.find(k => k.nama.toLowerCase() === row.kelas_nama.toLowerCase())
+          const k = kelasList.find((k: any) => k.nama.toLowerCase() === row.kelas_nama.toLowerCase())
           if (k) await supabase.from('siswa_kelas').upsert({ student_id: data.user.id, kelas_id: k.id })
         }
       }
@@ -231,7 +233,7 @@ export default function AdminPage() {
   const logout = async () => { await supabase.auth.signOut(); router.push('/auth/login') }
 
   // ── Filtered students ─────────────────────────────────────────
-  const filtered = students.filter(s => {
+  const filtered = students.filter((s: any) => {
     if (search && !s.full_name.toLowerCase().includes(search.toLowerCase())
       && !s.npm.includes(search) && !s.username.toLowerCase().includes(search.toLowerCase())) return false
     if (filterKelas && s.kelas_nama !== filterKelas) return false
@@ -251,14 +253,14 @@ export default function AdminPage() {
 
   // Select helpers
   const toggleOne   = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const toggleAll   = () => setSelected(p => p.size === paginated.length ? new Set() : new Set(paginated.map(s => s.id)))
-  const allChecked  = paginated.length > 0 && paginated.every(s => selected.has(s.id))
-  const someChecked = paginated.some(s => selected.has(s.id)) && !allChecked
+  const toggleAll   = () => setSelected(p => p.size === paginated.length ? new Set() : new Set(paginated.map((s: any) => s.id)))
+  const allChecked  = paginated.length > 0 && paginated.every((s: any) => selected.has(s.id))
+  const someChecked = paginated.some((s: any) => selected.has(s.id)) && !allChecked
 
   const stats = {
     total:     students.length,
-    submitted: students.filter(s => s.is_submitted).length,
-    pending:   students.filter(s => !s.is_submitted).length,
+    submitted: students.filter((s: any) => s.is_submitted).length,
+    pending:   students.filter((s: any) => !s.is_submitted).length,
     kelas:     kelasList.length,
   }
 
@@ -310,7 +312,7 @@ export default function AdminPage() {
                 <label className="block text-sm text-slate-300 mb-1.5">Kelas</label>
                 <select value={stuForm.kelas_id || ''} onChange={e => setSF(p => ({ ...p, kelas_id: e.target.value }))} className="input-field">
                   <option value="">— Tidak ada kelas —</option>
-                  {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                  {kelasList.map((k: any) => <option key={k.id} value={k.id}>{k.nama}</option>)}
                 </select>
               </div>
             )}
@@ -401,7 +403,7 @@ export default function AdminPage() {
           {kelasList.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
               <span className="text-xs text-slate-500">Kelas tersedia:</span>
-              {kelasList.map(k => <span key={k.id} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{k.nama}</span>)}
+              {kelasList.map((k: any) => <span key={k.id} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{k.nama}</span>)}
             </div>
           )}
           <button onClick={downloadTemplate} className="btn-secondary flex items-center gap-2 text-sm py-2">
@@ -440,14 +442,14 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-800/50">
-                    {['Nama', 'NPM', 'Username', 'Password', 'Kelas'].map(h =>
+                    {['Nama', 'NPM', 'Username', 'Password', 'Kelas'].map((h: any) =>
                       <th key={h} className="text-left text-xs text-slate-500 font-medium p-3">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {importData.slice(0, 8).map((row, i) => {
+                  {importData.slice(0, 8).map((row: any, i: any) => {
                     const km = row.kelas_nama
-                      ? kelasList.find(k => k.nama.toLowerCase() === row.kelas_nama.toLowerCase())
+                      ? kelasList.find((k: any) => k.nama.toLowerCase() === row.kelas_nama.toLowerCase())
                       : null
                     const usernameOk = row.username && /^[a-zA-Z0-9._-]+$/.test(row.username)
                     return (
@@ -472,16 +474,16 @@ export default function AdminPage() {
               </table>
               {importData.length > 8 && <p className="text-xs text-slate-600 p-3">...dan {importData.length - 8} lainnya</p>}
             </div>
-            {importData.some(r => !r.username) && (
+            {importData.some((r: any) => !r.username) && (
               <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 mb-3 text-red-400 text-sm">⚠️ Ada baris tanpa username. Kolom username wajib diisi.</div>
             )}
-            {importData.some(r => r.kelas_nama && !kelasList.find(k => k.nama.toLowerCase() === r.kelas_nama.toLowerCase())) && (
+            {importData.some((r: any) => r.kelas_nama && !kelasList.find((k: any) => k.nama.toLowerCase() === r.kelas_nama.toLowerCase())) && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 mb-3 text-amber-400 text-sm">⚠️ Beberapa nama kelas tidak ditemukan (ditandai merah). Siswa tetap dibuat tapi tidak dimasukkan ke kelas.</div>
             )}
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-3 mb-4 text-blue-400 text-sm">
               ℹ️ Nonaktifkan konfirmasi email di Supabase Auth Settings agar siswa bisa langsung login dengan username.
             </div>
-            <button onClick={runImport} disabled={importing || importData.some(r => !r.username)}
+            <button onClick={runImport} disabled={importing || importData.some((r: any) => !r.username)}
               className="btn-primary flex items-center gap-2">
               {importing
                 ? <><div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"/>Mengimport...</>
@@ -506,7 +508,7 @@ export default function AdminPage() {
             </div>
             {importResult.errors.length > 0 && (
               <div className="bg-slate-800 rounded-lg p-4 mb-4 max-h-40 overflow-y-auto">
-                {importResult.errors.map((e, i) => <p key={i} className="text-xs text-red-400">• {e}</p>)}
+                {importResult.errors.map((e: any, i: any) => <p key={i} className="text-xs text-red-400">• {e}</p>)}
               </div>
             )}
             <div className="flex gap-3">
@@ -563,7 +565,7 @@ export default function AdminPage() {
             { label: 'Sudah Kumpul',  value: stats.submitted, color: 'text-green-400' },
             { label: 'Belum Kumpul',  value: stats.pending,   color: 'text-amber-400' },
             { label: 'Kelas',         value: stats.kelas,     color: 'text-blue-400'  },
-          ].map(s => (
+          ].map((s: any) => (
             <div key={s.label} className="card p-4">
               <p className="text-xs text-slate-500 mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -590,7 +592,7 @@ export default function AdminPage() {
               placeholder="Cari nama, NPM, atau username..." className="input-field text-sm py-2 flex-1 min-w-[200px] max-w-xs" />
             <select value={filterKelas} onChange={e => setFilterKelasR(e.target.value)} className="input-field text-sm py-2 w-auto">
               <option value="">Semua Kelas</option>
-              {kelasList.map(k => <option key={k.id} value={k.nama}>{k.nama}</option>)}
+              {kelasList.map((k: any) => <option key={k.id} value={k.nama}>{k.nama}</option>)}
             </select>
             <select value={filterStatus} onChange={e => setFilterStatusR(e.target.value)} className="input-field text-sm py-2 w-auto">
               <option value="">Semua Status</option>
@@ -649,7 +651,7 @@ export default function AdminPage() {
                       : 'Tidak ada siswa yang cocok.'}
                   </td></tr>
                 )}
-                {paginated.map((s, i) => (
+                {paginated.map((s: any, i: any) => (
                   <tr key={s.id} className={`border-b border-slate-800/50 transition-colors ${selected.has(s.id) ? 'bg-amber-500/5' : 'hover:bg-slate-800/20'}`}>
                     <td className="p-3 text-center">
                       <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} className="accent-amber-500 cursor-pointer" />
@@ -699,12 +701,12 @@ export default function AdminPage() {
                     ‹ Prev
                   </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                    .filter((p: any) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
                     .reduce<(number | '…')[]>((acc, p, idx, arr) => {
                       if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…')
                       acc.push(p); return acc
                     }, [])
-                    .map((p, i) => p === '…'
+                    .map((p: any, i: any) => p === '…'
                       ? <span key={`e${i}`} className="px-1 text-xs text-slate-600">…</span>
                       : <button key={p} onClick={() => setPage(p as number)}
                           className={`w-7 h-7 rounded text-xs transition-colors ${safePage === p ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
