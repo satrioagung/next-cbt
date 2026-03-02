@@ -16,7 +16,7 @@ const sourceSans = Source_Sans_3({
 })
 
 export const metadata: Metadata = {
-  title: 'UTS Essay - Sistem Ujian Online',
+  title: 'Aplikasi UTS | SMK Bintang Sembilan',
   description: 'Aplikasi ujian tengah semester berbasis essay',
 }
 

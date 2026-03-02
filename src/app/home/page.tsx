@@ -257,7 +257,7 @@ export default function HomeSiswa() {
               </svg>
             </div>
             <div>
-              <h1 className="font-semibold text-slate-100 text-sm">UTS Essay</h1>
+              <h1 className="font-semibold text-slate-100 text-sm">Aplikasi UTS SMK Bintang Sembilan</h1>
               <p className="text-xs text-slate-500">
                 {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
