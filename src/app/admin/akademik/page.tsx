@@ -2,6 +2,7 @@
 import React, { useState, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import AdminNavbar from '@/components/AdminNavbar'
 
 // ── Types ─────────────────────────────────────────────────────
 type Kelas    = { id: string; nama: string; tingkat: string; jumlah_siswa?: number; jumlah_mapel?: number }
@@ -46,6 +47,9 @@ export default function AkademikPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('kelas')
   const [msg, setMsg]             = useState('')
   const [saving, setSaving]       = useState(false)
+
+  //navbar
+  const [adminName, setAdminName] = useState('')
 
   // Data
   const [kelasList, setKelasList]   = useState<Kelas[]>([])
@@ -94,6 +98,11 @@ export default function AkademikPage() {
 
   const init = async () => {
     const { data: { session } } = await supabase.auth.getSession()
+
+    //navbar profiles
+    const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single()
+    setAdminName((prof as any)?.full_name || '')
+
     if (!session) { router.push('/auth/login'); return }
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
     if ((profile as { role?: string } | null)?.role !== 'admin') { router.push('/exam'); return }
@@ -546,7 +555,7 @@ export default function AkademikPage() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
+      {/* <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => router.push('/admin')} className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition-colors">
             <Icon d={IC.back} />
@@ -556,7 +565,8 @@ export default function AkademikPage() {
           </div>
           <h1 className="font-semibold text-slate-100">Manajemen Akademik</h1>
         </div>
-      </header>
+      </header> */}
+      <AdminNavbar adminName={adminName} />
 
       <div className="max-w-7xl mx-auto p-4">
         {/* Flash */}
