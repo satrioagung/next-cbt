@@ -379,19 +379,44 @@ export default function BankSoalPage() {
     a.click()
   }
 
-  const dlRekap = () => {
-    const rows = [['Username','NPM','Nama','Kelas','Status','Dijawab','Dinilai','Rata-rata']]
-    sessions.forEach((s: any) => rows.push([
-      s.username, s.npm, s.full_name, s.kelas||'-',
-      s.is_submitted?'Dikumpulkan':'Belum',
-      s.answers.filter((a: any) =>a.answer_text?.trim()).length.toString(),
-      s.graded_count.toString(),
-      s.total_score!==null?s.total_score.toString():'-',
-    ]))
-    const csv = rows.map((r: any) =>r.map((v: any) =>`"${v}"`).join(',')).join('\n')
+  const dlRekapJawaban = () => {
+    // Kumpulkan semua nomor soal
+    const allNomor: number[] = []
+    sessions.forEach(s => s.answers.forEach((a: any) => {
+      if (!allNomor.includes(a.question.number)) allNomor.push(a.question.number)
+    }))
+    allNomor.sort((x, y) => x - y)
+
+    // Header
+    const header = [
+      'Username','NPM','Nama Lengkap','Kelas','Status','Tgl Kumpul',
+      ...allNomor.flatMap(n => [`Soal_${n}`, `Jawaban_${n}`, `Nilai_${n}`, `Feedback_${n}`]),
+      'Rata_Nilai'
+    ]
+
+    const rows = sessions.map(s => {
+      const base = [
+        s.username, s.npm, s.full_name, s.kelas || '-',
+        s.is_submitted ? 'Dikumpulkan' : 'Belum',
+        s.submitted_at ? new Date(s.submitted_at).toLocaleString('id-ID') : '-',
+      ]
+      const ansCols = allNomor.flatMap(n => {
+        const ans = s.answers.find((a: any) => a.question.number === n)
+        return [
+          ans?.question?.question?.replace(/\n/g, ' ') || '-',
+          ans?.answer_text?.replace(/\n/g, ' ') || '(kosong)',
+          ans?.score !== null && ans?.score !== undefined ? String(ans.score) : '-',
+          ans?.feedback?.replace(/\n/g, ' ') || '-',
+        ]
+      })
+      return [...base, ...ansCols, s.total_score !== null && s.total_score !== undefined ? String(s.total_score) : '-']
+    })
+
+    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`
+    const csv = [header, ...rows].map(r => r.map(esc).join(',')).join('\n')
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    a.download = `rekap-${selJadwal?.nama.replace(/\s+/g,'-')}.csv`
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }))
+    a.download = `rekap-jawaban-${selJadwal?.nama.replace(/\s+/g, '-')}.csv`
     a.click()
   }
 
@@ -602,8 +627,8 @@ export default function BankSoalPage() {
             <button onClick={dlSemua} disabled={!sessions.length} className="btn-secondary text-xs py-2 flex items-center gap-1.5">
               <Ic d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>Semua Jawaban (.txt)
             </button>
-            <button onClick={dlRekap} disabled={!sessions.length} className="btn-secondary text-xs py-2 flex items-center gap-1.5">
-              <Ic d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>Rekap Nilai (.csv)
+            <button onClick={dlRekapJawaban} disabled={!sessions.length} className="btn-secondary text-xs py-2 flex items-center gap-1.5">
+              <Ic d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>Rekap Jawaban (.csv)
             </button>
           </div>
         </div>
