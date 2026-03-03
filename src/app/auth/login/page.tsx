@@ -59,9 +59,9 @@ export default function LoginPage() {
           )}
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Username / NPM</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Username</label>
               <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-                placeholder="Masukkan username atau NPM" required autoComplete="username" className="input-field" />
+                placeholder="Masukkan username" required autoComplete="username" className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
